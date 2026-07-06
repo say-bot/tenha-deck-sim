@@ -105,6 +105,13 @@ body:not(.home) #homeView{display:none}
 .hcard .h-name{font-size:15px;font-weight:bold;margin:2px 0}
 .hcard .h-gen{font-size:12.5px;color:var(--txt)}
 .hcard .h-cmt{font-size:11px;color:var(--sub);margin-top:3px}
+.hcard{position:relative}
+.h-tac{font-size:11px;color:var(--txt);margin-top:2px;line-height:1.4}
+.h-tacg{color:var(--sub);margin-right:5px;font-size:10.5px}
+.h-tip{display:none;position:absolute;left:0;top:calc(100% + 4px);width:min(430px,88vw);background:#171a22;border:1px solid var(--gold);border-radius:8px;padding:10px 12px;z-index:40;font-size:11.5px;line-height:1.55;box-shadow:0 8px 22px rgba(0,0,0,.6);pointer-events:none}
+.hcard:hover .h-tip{display:block}
+.tip-sec{margin-bottom:6px}
+@media(hover:none){.hcard:hover .h-tip{display:none}} /* 터치 기기는 클릭 상세로 대체 */
 /* ── 모바일(아이폰/안드로이드 세로) 대응 ── */
 @media(max-width:600px){
   .topbar .actions{width:100%}
@@ -799,12 +806,28 @@ function filterDecks(){
 function showHome(){ document.body.classList.add('home'); window.scrollTo(0,0); }
 function showEditor(){ document.body.classList.remove('home'); window.scrollTo(0,0); }
 function renderHome(){
-  const card = (d, onclick, badge)=>`<div class="hcard" data-g="${d.generals.join(',')}" data-n="${esc(d.name)}" onclick="${onclick}">
+  const trimEg = s => String(s).split(' — 예:')[0].split('(예:')[0].replace(/\s+$/,'');
+  const card = (d, onclick, badge)=>{
+    // 무장별 장착 전법 (등급색 포함)
+    const tac = d.generals.map((g,k)=>{
+      const ts = (d.tactics[k]||[]).filter(Boolean);
+      return ts.length ? `<div class="h-tac"><span class="h-tacg">${esc(g)}</span>${ts.map(rname).join('·')}</div>` : '';
+    }).join('');
+    // 마우스오버 툴팁: 원리/강점/약점 (약점·강점의 '예:' 꼬리는 생략 — 상세는 편성 화면에서)
+    const tip = [];
+    if(d.principle) tip.push(`<div class="tip-sec"><b style="color:#9ecf9e">⚙ 작동 원리</b><br>${esc(d.principle)}</div>`);
+    if(d.strong && d.strong.length) tip.push(`<div class="tip-sec"><b style="color:#7fc97f">💪 이런 상대에 강함</b>${d.strong.map(x=>`<div>· ${esc(trimEg(x))}</div>`).join('')}</div>`);
+    if(d.weak && d.weak.length) tip.push(`<div class="tip-sec"><b style="color:var(--red)">⚠ 약점</b>${d.weak.map(x=>`<div>· ${esc(trimEg(x))}</div>`).join('')}</div>`);
+    const tipHtml = tip.length ? `<div class="h-tip">${tip.join('')}<div style="color:var(--sub);margin-top:4px">클릭하면 편성 화면에서 상세(카운터 예시 포함)를 볼 수 있습니다</div></div>` : '';
+    return `<div class="hcard" data-g="${d.generals.join(',')}" data-n="${esc(d.name)}" onclick="${onclick}">
       <span class="h-tier">${badge}</span>
       <div class="h-name">${esc(d.name)}</div>
       <div class="h-gen">${d.generals.map(g=>`<span class="chip f${G[g]?G[g].faction:''}">${G[g]?G[g].faction:''}</span>${g}`).join(' ')}</div>
+      ${tac}
       ${d.comment?`<div class="h-cmt">${esc(d.comment)}</div>`:''}
+      ${tipHtml}
     </div>`;
+  };
   document.getElementById('homeTier').innerHTML =
     DATA.decks.map((d,i)=>card(d, `loadPreset(${i})`, `[${d.tier}]`)).join('');
   document.getElementById('homeStream').innerHTML =
