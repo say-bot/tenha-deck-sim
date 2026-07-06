@@ -224,11 +224,9 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
         <div class="formations" id="fmtBox"></div>
       </div>
       <div class="panel">
-        <h2 style="display:flex;align-items:center;gap:10px">부대 편성 <span style="font-size:12px;color:var(--sub);font-weight:normal">— 슬롯을 눌러 무장을 배치하세요</span>
-          <button class="primary" style="margin-left:auto" onclick="diagnoseDeck()">🔬 덱 진단</button></h2>
+        <h2>부대 편성 <span style="font-size:12px;color:var(--sub);font-weight:normal">— 슬롯을 눌러 무장을 배치하세요</span></h2>
         <div class="slots" id="slotBox"></div>
         <div id="deckWarn"></div>
-        <div id="diagBox"></div>
         <div id="presetNote" style="margin-top:10px"></div>
       </div>
       <div class="panel">
@@ -930,141 +928,6 @@ function renderSearch(){
         <div>${esc(b.effect)}</div></div>`).join('') : '');
 }
 
-// ── 덱 진단 (데이터 기반 정적 분석 — 전투 수치 시뮬레이션 아님) ──
-const CTRL_STATES = ['위협','무장 해제','능력 소진','혼란','조롱'];
-function ciEx(mech){
-  const ci = (DATA.counterIndex||{})[mech];
-  if(!ci) return '';
-  const parts = [...(ci.generals||[]).slice(0,3), ...(ci.tactics||[]).slice(0,3).map(t=>`전법 '${t}'`)];
-  return parts.length ? ` <span style="color:var(--sub)">(예: ${parts.join(', ')})</span>` : '';
-}
-function diagnoseDeck(){
-  const box = document.getElementById('diagBox');
-  const units = deck.slots.map((n,i)=>n?{
-    n, i, g:G[n],
-    ts: deck.tactics[i].filter(Boolean).map(tn=>T[tn]).filter(Boolean)
-  }:null).filter(Boolean);
-  if(units.length < 2){
-    box.innerHTML = '<p class="note" style="margin-top:8px">무장을 2명 이상 배치한 뒤 진단하세요.</p>';
-    return;
-  }
-  const good=[], warn=[], bad=[];
-  const fmt = fmtByName(deck.formation);
-
-  // ① 역할 균형
-  const hasHeal = units.some(u=>u.g.tendency.includes('치유') || u.g.flags.includes('회복') || u.ts.some(t=>t.trait==='치유'||t.flags.includes('회복')));
-  const hasTank = units.some(u=>u.i < fmt.front && (u.g.troop==='방패병' || u.g.def>=205 || u.g.tendency.includes('방어')));
-  const dealers = units.filter(u=>u.g.atk>=220 || u.g.int>=220);
-  if(hasHeal) good.push('회복 담당이 있어 지속전이 가능합니다.');
-  else warn.push('회복 수단이 없습니다 — 소모전·지구전에서 병력 손실이 누적됩니다. 치유 성향 무장이나 치유 전법(청낭 치료·청풍 질주 등)을 고려하세요.');
-  if(hasTank) good.push('전열에 탱킹 가능한 무장이 배치되어 있습니다.');
-  else warn.push(`전열(피격 ${fmt.rates[0]}%)에 확실한 탱커가 없습니다 — 방패병·고통솔 무장을 앞에 세우는 것이 정석입니다.`);
-  if(!dealers.length) warn.push('무력·지력 220 이상의 확실한 딜러가 없습니다 — 결정력 부족으로 판정전이 길어질 수 있습니다.');
-
-  // ② 전열 슬롯 적합성 + 권장 배치
-  units.forEach(u=>{
-    const pos = slotPos(u.i);
-    if(pos==='전열' && u.g.def < 185 && u.g.troop!=='방패병')
-      warn.push(`${u.n}(통솔 ${u.g.def})이 피격 ${fmt.rates[u.i]}% 전열에 있습니다 — 통솔이 낮아 병력이 빨리 녹습니다.`);
-    if(u.g.pos!=='균형' && u.g.pos!==pos)
-      warn.push(`${u.n}의 권장 배치는 ${u.g.pos}인데 현재 ${pos}입니다.`);
-  });
-
-  // ③ 전법-스탯 적합성
-  units.forEach(u=>{
-    u.ts.forEach(t=>{
-      if(t.trait==='책략' && u.g.atk - u.g.int >= 40)
-        bad.push(`${u.n}(지력 ${u.g.int} < 무력 ${u.g.atk})에 책략 전법 '${t.name}' — 책략 피해는 지력 비례라 효율이 크게 떨어집니다. 병기 전법으로 교체 권장.`);
-      if(t.trait==='병기' && u.g.int - u.g.atk >= 40)
-        bad.push(`${u.n}(무력 ${u.g.atk} < 지력 ${u.g.int})에 병기 전법 '${t.name}' — 병기 피해는 무력 비례라 효율이 낮습니다.`);
-      if(t.trait==='치유' && u.g.int < 160)
-        warn.push(`${u.n}(지력 ${u.g.int})의 치유 전법 '${t.name}' — 회복량이 지력 비례라 치유량이 낮습니다.`);
-    });
-  });
-
-  // ④ 상태이상 시너지 연결
-  const provides = new Map(); // state → [제공자]
-  units.forEach(u=>{
-    u.g.gives.forEach(s=>{ if(!provides.has(s)) provides.set(s,[]); provides.get(s).push(`${u.n}(고유)`); });
-    u.ts.forEach(t=>t.gives.forEach(s=>{ if(!provides.has(s)) provides.set(s,[]); provides.get(s).push(`${u.n}의 '${t.name}'`); }));
-  });
-  const anyDebuff = provides.size > 0;
-  const anyCtrl = CTRL_STATES.some(s=>provides.has(s));
-  units.forEach(u=>{
-    const check = (wants, label, selfSrc)=>{
-      wants.forEach(w=>{
-        let cand=[];
-        if(w==='디버프'||w==='이상상태') cand=[...provides.values()].flat();
-        else if(w==='제어') cand=CTRL_STATES.filter(s=>provides.has(s)).flatMap(s=>provides.get(s));
-        else cand=provides.get(w)||[];
-        const ext = cand.filter(x=>x!==selfSrc); // 자기 전법이 스스로 채우는 경우 제외
-        if(ext.length) good.push(`${ext[0]} → ${u.n}의 ${label} '${w}' 연계 성립.`);
-        else if(!cand.length) warn.push(`${u.n}의 ${label}은(는) '${w}' 상태와 연계될 때 강해지는데, 부대에 ${w} 부여 수단이 없습니다.${ciEx(w)}`);
-      });
-    };
-    check(u.g.wants, `고유 전법(${u.g.skill.name})`, `${u.n}(고유)`);
-    u.ts.forEach(t=>check(t.wants, `'${t.name}'`, `${u.n}의 '${t.name}'`));
-  });
-
-  // ⑤ 준비 전법 / 발동률
-  const prepUsers = units.filter(u=>u.ts.some(t=>t.flags.includes('준비')));
-  if(prepUsers.length)
-    warn.push(`준비 전법 사용(${prepUsers.map(u=>u.n).join('·')}) — 위협을 맞으면 준비가 중단됩니다.${ciEx('위협')}`);
-
-  // ⑥ 예상 약점 (엔진 분류 → 카운터 예시)
-  const weak = [];
-  const usesNormal = units.some(u=>u.g.skill.type==='추격' || u.g.flags.includes('일공') || u.g.flags.includes('연타') || u.ts.some(t=>t.type==='추격'||t.flags.includes('일공')||t.flags.includes('연타')));
-  const activeCnt = units.reduce((a,u)=>a+(u.g.skill.type==='액티브'?1:0)+u.ts.filter(t=>t.type==='액티브').length,0);
-  const usesCrit = units.some(u=>u.g.flags.includes('회심')||u.ts.some(t=>t.flags.includes('회심')));
-  const usesCounter = units.some(u=>u.g.flags.includes('반격')||u.ts.some(t=>t.flags.includes('반격')));
-  const usesEvade = units.some(u=>u.g.flags.includes('피신')||u.ts.some(t=>t.flags.includes('피신')));
-  if(usesNormal) weak.push(`일반 공격·추격 의존 — 무장 해제${ciEx('무장 해제')}·공포·조롱에 화력이 끊깁니다.`);
-  if(activeCnt>=3) weak.push(`액티브 전법 비중이 높음(${activeCnt}개) — 능력 소진${ciEx('능력 소진')}·위협에 취약합니다.`);
-  if(hasHeal) weak.push(`회복 의존 — 군량 고갈${ciEx('군량 고갈')}이 걸리면 유지력이 급락합니다.`);
-  if(usesCrit) weak.push(`회심 의존 — 요술${ciEx('요술')}에 피해가 깎입니다.`);
-  if(usesCounter) weak.push(`반격 엔진 — 일반 공격을 안 치는 책략덱 상대로는 트리거가 없고, 무장 해제에 막힙니다.`);
-  if(usesEvade) weak.push(`피신 의존 — 백발백중(태사자 병법 등) 상대에게 무력화됩니다.`);
-
-  // ⑦ 유사 티어덱/방송덱
-  const mySet = new Set(units.map(u=>u.n));
-  const sims = [];
-  [...DATA.decks.map((d,i)=>({d,how:'tier',i})), ...(DATA.streamDecks||[]).map((d,i)=>({d,how:'stream',i}))].forEach(({d,how,i})=>{
-    const ov = d.generals.filter(g=>mySet.has(g)).length;
-    if(ov>=2) sims.push({d,how,i,ov});
-  });
-  sims.sort((a,b)=>b.ov-a.ov);
-
-  // 렌더
-  const sec = (title,color,items)=> items.length?`<div style="margin-top:8px"><b style="color:${color}">${title}</b>${items.map(x=>`<div class="ana-line">· ${x}</div>`).join('')}</div>`:'';
-  let html = `<div class="skillbox open" style="border-color:#5c9de0;margin-top:10px">
-    <b style="color:#5c9de0">🔬 덱 진단 결과</b>`;
-  html += sec('✅ 잘 맞물리는 부분','#7fc97f',good);
-  html += sec('⚠ 개선 여지','#e0a05c',warn);
-  html += sec('❌ 문제점','var(--red)',bad);
-  html += sec('🛡 이 덱이 조심해야 할 상대','#d9a8ff',weak);
-  if(sims.length){
-    html += `<div style="margin-top:8px"><b style="color:var(--gold)">📋 유사한 검증 덱</b>`;
-    sims.slice(0,3).forEach(({d,how,i,ov})=>{
-      const same = ov===3 ? '<b style="color:#7fc97f">3인 동일!</b>' : `${ov}/3 일치`;
-      html += `<div class="ana-line">· [${how==='tier'?d.tier:'📺'+(d.grade||'방송')}] <b>${esc(d.name)}</b> (${d.generals.join('·')}) — ${same}
-        <button style="font-size:11px;padding:1px 8px;margin-left:4px" onclick="${how==='tier'?`loadPreset(${i})`:`loadStream(${i})`}">전법·배치 비교하러 가기</button></div>`;
-      if(ov===3){
-        const diffs = [];
-        d.generals.forEach((g,k)=>{
-          const my = deck.tactics[deck.slots.indexOf(g)]||[];
-          const ref = (d.tactics[k]||[]).filter(Boolean);
-          const dd = ref.filter(t=>!my.includes(t));
-          if(dd.length) diffs.push(`${g}: 검증덱은 ${dd.map(rname).join('·')} 채용`);
-        });
-        if(diffs.length) html += `<div class="ana-line" style="color:var(--sub)">　전법 차이 — ${diffs.join(' / ')}</div>`;
-      }
-    });
-    html += `</div>`;
-  }
-  html += `<div style="margin-top:8px;color:var(--sub);font-size:11px">※ 게임 데이터(전법 설명·스탯) 기반의 정적 진단입니다. 실제 전투의 수치·발동 순서·상성까지 계산하는 시뮬레이션이 아니므로 참고용으로 활용하세요.</div></div>`;
-  box.innerHTML = html;
-}
-
 // ── 유틸 ──
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function closeModal(id){ document.getElementById(id).classList.remove('show'); }
@@ -1072,7 +935,6 @@ document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>
 
 function renderAll(){
   renderFormations(); renderSlots(); renderCombos(); renderBonds(); renderStats(); renderWarn(); renderPresetNote();
-  const db = document.getElementById('diagBox'); if(db) db.innerHTML = ''; // 편성 변경 시 이전 진단 무효화
 }
 renderPresets(); renderHome(); showRef('counter'); updateOwnCnt(); renderAll(); showHome();
 </script>
