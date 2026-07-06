@@ -12,7 +12,7 @@
   --지휘:#d4af37; --액티브:#e05c5c; --패시브:#5c9de0; --추격:#57c78e;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--txt);font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:14px;line-height:1.5}
+body{background:var(--bg);color:var(--txt);font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:14px;line-height:1.5;zoom:1.4}
 .wrap{max-width:1280px;margin:0 auto;padding:16px}
 h1{font-size:20px;color:var(--gold);letter-spacing:1px}
 h2{font-size:15px;color:var(--gold);margin-bottom:8px;border-left:3px solid var(--gold);padding-left:8px}
@@ -88,14 +88,11 @@ input[type=text]{background:var(--panel2);color:var(--txt);border:1px solid var(
 .pick-row .desc{font-size:11.5px;color:var(--sub);margin-top:2px}
 .sortbar{margin-left:auto;display:flex;gap:4px;align-items:center;font-size:12px;color:var(--sub)}
 footer{color:#555;font-size:11px;text-align:center;padding:20px 0}
-/* ── 덱 검색창 ── */
-.searchwrap{position:relative;flex:1 1 240px;min-width:180px;max-width:440px}
+/* ── 덱 검색창 (홈 카드 필터) ── */
+.searchwrap{position:relative;flex:1 1 260px;min-width:200px;max-width:480px}
 .searchwrap input{width:100%}
-#deckSearchDrop{display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--panel);border:1px solid var(--gold);border-radius:8px;max-height:380px;overflow-y:auto;z-index:30;box-shadow:0 6px 18px rgba(0,0,0,.5)}
-.ds-head{font-size:11px;color:var(--gold);padding:7px 10px 2px;font-weight:bold}
-.ds-row{padding:8px 10px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--line)}
-.ds-row:hover{background:var(--panel2)}
-.ds-row .h-tier{margin-right:2px}
+.hcard.filtered-out{display:none}
+.ds-empty{color:var(--sub);font-size:13px;padding:8px 2px}
 @media(max-width:600px){.searchwrap{flex-basis:100%;max-width:none}}
 /* ── 화면 전환 (홈/에디터) ── */
 body.home #editorView{display:none}
@@ -185,9 +182,8 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
   <div class="topbar">
     <h1>⚔ 삼국지: 천하결전 — 덱 세팅 시뮬레이터</h1>
     <div class="searchwrap">
-      <input type="text" id="deckSearch" placeholder="🔎 무장 이름으로 덱 검색 (예: 황충)" autocomplete="off"
-             oninput="renderDeckSearch()" onfocus="renderDeckSearch()" onblur="setTimeout(hideDeckSearch,150)">
-      <div id="deckSearchDrop"></div>
+      <input type="text" id="deckSearch" placeholder="🔎 장수 검색 — 띄어쓰기로 최대 3명 (예: 유비 장비)" autocomplete="off"
+             oninput="filterDecks()">
     </div>
     <div class="actions">
       <button class="editor-only" onclick="showHome()">🏠 메인 화면</button>
@@ -203,11 +199,11 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
   <!-- ── 메인(홈) 화면: 덱 카탈로그 ── -->
   <div id="homeView">
     <div class="panel">
-      <h2>📋 티어덱 프리셋 <span style="font-size:12px;color:var(--sub);font-weight:normal">— 카드를 누르면 편성 화면에서 열립니다</span></h2>
+      <h2>📋 티어덱 프리셋 <span style="font-size:12px;color:var(--sub);font-weight:normal">— 카드를 누르면 편성 화면에서 열립니다<span id="homeTierCnt"></span></span></h2>
       <div class="home-grid" id="homeTier"></div>
     </div>
     <div class="panel">
-      <h2>📺 방송 상담덱</h2>
+      <h2>📺 방송 상담덱<span id="homeStreamCnt" style="font-size:12px;color:var(--sub);font-weight:normal"></span></h2>
       <div class="home-grid" id="homeStream"></div>
     </div>
     <div class="panel" style="text-align:center">
@@ -626,8 +622,6 @@ function loadDeckDef(src, i){
   });
   renderAll();
   showEditor();
-  const ds = document.getElementById('deckSearch');
-  if(ds){ ds.value = ''; hideDeckSearch(); }
 }
 // 슬롯 위치 이동(무장+전법 함께 스왑)
 function moveSlot(i, d){
@@ -771,34 +765,41 @@ function renderPresetNote(){
   note.innerHTML = html;
 }
 
-// ── 덱 검색창 (무장 이름 → 소속 덱) ──
-function hideDeckSearch(){
-  const drop = document.getElementById('deckSearchDrop');
-  drop.style.display = 'none';
-}
-function renderDeckSearch(){
-  const q = document.getElementById('deckSearch').value.trim();
-  const drop = document.getElementById('deckSearchDrop');
-  if(!q){ hideDeckSearch(); return; }
-  const match = d => d.generals.some(n=>n.includes(q)) || d.name.includes(q);
-  const hl = names => names.map(n=>n.includes(q)?`<b style="color:var(--gold)">${n}</b>`:n).join('·');
-  const tier = DATA.decks.map((d,i)=>({d,i})).filter(x=>match(x.d));
-  const stream = (DATA.streamDecks||[]).map((d,i)=>({d,i})).filter(x=>match(x.d));
-  let html = '';
-  if(tier.length) html += `<div class="ds-head">📋 티어덱 (${tier.length})</div>` +
-    tier.map(({d,i})=>`<div class="ds-row" onmousedown="loadPreset(${i})"><span class="h-tier">[${d.tier}]</span> <b>${esc(d.name)}</b> — ${hl(d.generals)}</div>`).join('');
-  if(stream.length) html += `<div class="ds-head">📺 방송 상담덱 (${stream.length})</div>` +
-    stream.map(({d,i})=>`<div class="ds-row" onmousedown="loadStream(${i})"><span class="h-tier">[${d.grade||'방송'}${d.by?'·'+esc(d.by):''}]</span> <b>${esc(d.name)}</b> — ${hl(d.generals)}</div>`).join('');
-  if(!html) html = `<div class="ds-row" style="color:var(--sub);cursor:default">'${esc(q)}' 무장이 포함된 덱이 없습니다</div>`;
-  drop.innerHTML = html;
-  drop.style.display = 'block';
+// ── 덱 검색: 장수 이름(띄어쓰기 최대 3명, AND 조건)으로 홈 카드 필터 ──
+function filterDecks(){
+  const raw = document.getElementById('deckSearch').value.trim();
+  const tokens = raw ? raw.split(/\s+/).filter(Boolean).slice(0, 3) : [];
+  if(tokens.length && document.body.classList.contains('home') === false) showHome();
+  let tierN = 0, streamN = 0;
+  document.querySelectorAll('.hcard').forEach(el=>{
+    const gens = (el.dataset.g || '').split(',');
+    const nm = el.dataset.n || '';
+    const ok = tokens.every(t => gens.some(g=>g.includes(t)) || nm.includes(t));
+    el.classList.toggle('filtered-out', !ok);
+    if(ok){ el.closest('#homeTier') ? tierN++ : streamN++; }
+  });
+  // 섹션 카운트 + 결과 없음 안내
+  const tierHead = document.getElementById('homeTierCnt');
+  const streamHead = document.getElementById('homeStreamCnt');
+  if(tierHead) tierHead.textContent = tokens.length ? ` — ${tierN}개 일치` : '';
+  if(streamHead) streamHead.textContent = tokens.length ? ` — ${streamN}개 일치` : '';
+  const setEmpty = (boxId, n)=>{
+    const box = document.getElementById(boxId);
+    let e = box.querySelector('.ds-empty');
+    if(tokens.length && n === 0){
+      if(!e){ e = document.createElement('div'); e.className = 'ds-empty'; box.appendChild(e); }
+      e.textContent = `'${tokens.join(' + ')}' 조합이 모두 포함된 덱이 없습니다`;
+    } else if(e) e.remove();
+  };
+  setEmpty('homeTier', tierN);
+  setEmpty('homeStream', streamN);
 }
 
 // ── 화면 전환 (홈/에디터) ──
 function showHome(){ document.body.classList.add('home'); window.scrollTo(0,0); }
 function showEditor(){ document.body.classList.remove('home'); window.scrollTo(0,0); }
 function renderHome(){
-  const card = (d, onclick, badge)=>`<div class="hcard" onclick="${onclick}">
+  const card = (d, onclick, badge)=>`<div class="hcard" data-g="${d.generals.join(',')}" data-n="${esc(d.name)}" onclick="${onclick}">
       <span class="h-tier">${badge}</span>
       <div class="h-name">${esc(d.name)}</div>
       <div class="h-gen">${d.generals.map(g=>`<span class="chip f${G[g]?G[g].faction:''}">${G[g]?G[g].faction:''}</span>${g}`).join(' ')}</div>
