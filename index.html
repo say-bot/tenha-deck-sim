@@ -111,6 +111,11 @@ body:not(.home) #homeView{display:none}
 .h-tacg{flex-shrink:0;min-width:3.4em;text-align:center;font-size:10.5px;color:var(--sub);background:#2e3444;border-radius:8px;padding:1px 7px}
 .h-tip{display:none;position:absolute;left:0;top:calc(100% + 6px);width:min(440px,88vw);background:#060709;border:2px solid var(--gold);border-radius:10px;padding:12px 14px;z-index:40;font-size:12px;line-height:1.6;color:#f2f0e8;box-shadow:0 10px 28px rgba(0,0,0,.85);pointer-events:none}
 .hcard:hover .h-tip{display:block}
+/* 호버 시 카드·패널만 남기고 페이지 전체 디밍 */
+@media(hover:hover){
+  .hcard:hover{z-index:50;border-color:var(--gold)}
+  .hcard:hover::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:-1;pointer-events:none}
+}
 .tip-sec{margin-bottom:8px}
 .tip-sec b{display:inline-block;margin-bottom:2px}
 @media(hover:none){.hcard:hover .h-tip{display:none}} /* 터치 기기는 클릭 상세로 대체 */
@@ -189,13 +194,13 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
 <body>
 <div class="wrap">
   <div class="topbar">
-    <h1>⚔ 삼국지: 천하결전 — 덱 세팅 시뮬레이터</h1>
+    <h1 onclick="goHome()" style="cursor:pointer" title="메인 화면으로">⚔ 삼국지: 천하결전 — 덱 세팅 시뮬레이터</h1>
     <div class="searchwrap">
       <input type="text" id="deckSearch" placeholder="🔎 장수 검색 — 띄어쓰기로 최대 3명 (예: 유비 장비)" autocomplete="off"
              oninput="filterDecks()">
     </div>
     <div class="actions">
-      <button class="editor-only" onclick="showHome()">🏠 메인 화면</button>
+      <button class="editor-only" onclick="goHome()">🏠 메인 화면</button>
       <select id="presetSel" class="editor-only"><option value="">📋 티어덱 프리셋 불러오기…</option></select>
       <select id="streamSel" class="editor-only"><option value="">📺 방송 상담덱 불러오기…</option></select>
       <button onclick="openOwnModal()">🎖 보유 무장 <span id="ownCnt"></span></button>
@@ -804,9 +809,20 @@ function filterDecks(){
   setEmpty('homeStream', streamN);
 }
 
-// ── 화면 전환 (홈/에디터) ──
+// ── 화면 전환 (홈/에디터) — 브라우저 뒤로가기 지원 ──
 function showHome(){ document.body.classList.add('home'); window.scrollTo(0,0); }
-function showEditor(){ document.body.classList.remove('home'); window.scrollTo(0,0); }
+function showEditor(){
+  if(document.body.classList.contains('home') && location.hash !== '#deck')
+    history.pushState({v:'editor'}, '', '#deck');   // 홈→상세 진입을 히스토리에 기록
+  document.body.classList.remove('home');
+  window.scrollTo(0,0);
+}
+function goHome(){ // 🏠 버튼·타이틀 클릭: 히스토리를 정리하며 홈으로
+  if(location.hash === '#deck') history.back();
+  else showHome();
+}
+window.addEventListener('popstate', ()=>{ showHome(); });
+if(location.hash === '#deck') history.replaceState(null, '', location.pathname); // 새로고침 잔여 해시 정리
 function renderHome(){
   const trimEg = s => String(s).split(' — 예:')[0].split('(예:')[0].replace(/\s+$/,'');
   const card = (d, onclick, badge)=>{
