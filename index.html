@@ -757,7 +757,7 @@ function renderPresetNote(){
     }
   }
   // 전법 대체 가이드
-  html += `<details style="margin-bottom:6px"><summary style="cursor:pointer"><b style="color:#5c9de0">🔁 추천 전법이 없을 때 — 대체 전법 가이드</b></summary>`;
+  html += `<details open style="margin-bottom:6px"><summary style="cursor:pointer"><b style="color:#5c9de0">🔁 추천 전법이 없을 때 — 대체 전법 가이드</b></summary>`;
   deck.slots.forEach((gname,i)=>{
     if(!gname) return;
     (deck.tactics[i]||[]).forEach((tn,j)=>{
