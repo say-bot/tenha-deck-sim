@@ -201,6 +201,7 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
       <select id="streamSel" class="editor-only"><option value="">📺 방송 상담덱 불러오기…</option></select>
       <button onclick="openOwnModal()">🎖 보유 무장 <span id="ownCnt"></span></button>
       <button onclick="openSearchModal()">🔍 조합 검색</button>
+      <button class="editor-only" id="regBtn" style="display:none" onclick="openRegModal()">📤 내 덱 등록</button>
       <button class="editor-only" onclick="openIO()">↕ 내보내기/가져오기</button>
       <button class="danger editor-only" onclick="resetDeck()">초기화</button>
     </div>
@@ -215,6 +216,11 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
     <div class="panel">
       <h2>📺 방송 상담덱<span id="homeStreamCnt" style="font-size:12px;color:var(--sub);font-weight:normal"></span></h2>
       <div class="home-grid" id="homeStream"></div>
+    </div>
+    <div class="panel" id="userDeckPanel" style="display:none">
+      <h2>👥 유저 등록 덱<span id="homeUserCnt" style="font-size:12px;color:var(--sub);font-weight:normal"></span>
+        <span style="font-size:12px;color:var(--sub);font-weight:normal"> — 직접 편성한 덱을 등록해 공유할 수 있습니다 (편성 화면의 📤 버튼)</span></h2>
+      <div class="home-grid" id="homeUser"></div>
     </div>
     <div class="panel" style="text-align:center">
       <button class="primary" style="font-size:14px;padding:10px 22px" onclick="resetDeck();showEditor()">➕ 빈 덱으로 직접 편성하기</button>
@@ -331,6 +337,27 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
       <button style="margin-left:auto" onclick="closeModal('searchModal')">✕ 닫기</button>
     </div>
     <div class="m-body" id="searchBody"></div>
+  </div>
+</div>
+
+<!-- 유저 덱 등록 모달 -->
+<div class="modal-bg" id="regModal">
+  <div class="modal" style="max-width:560px">
+    <div class="m-head"><b>📤 내 덱 등록</b><span class="note">— 현재 편성을 모두가 볼 수 있게 공유합니다</span>
+      <button style="margin-left:auto" onclick="closeModal('regModal')">✕ 닫기</button></div>
+    <div class="m-body">
+      <div id="regPreview" class="note" style="margin-bottom:8px"></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <input type="text" id="regNick" maxlength="12" placeholder="닉네임 (최대 12자)">
+        <input type="text" id="regName" maxlength="20" placeholder="덱 이름 (최대 20자, 예: 마초 원맨캐리)">
+        <textarea id="regDesc" maxlength="300" style="height:110px" placeholder="덱 설명 — 어떻게 굴러가는 덱인지, 필수 조건은 무엇인지 (최대 300자)"></textarea>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="primary" id="regSubmit" onclick="submitReg()">등록하기</button>
+          <span class="note" id="regMsg"></span>
+        </div>
+        <p class="note">※ 등록한 덱은 수정·삭제할 수 없으니 신중히 등록해 주세요. 도배 방지를 위해 5분에 1개만 등록됩니다. 부적절한 내용은 관리자가 삭제합니다.</p>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -610,7 +637,9 @@ function egChips(line){
 let currentPreset = null; // {src:'tier'|'stream', idx}
 function curDeckDef(){
   if(currentPreset===null) return null;
-  const list = currentPreset.src==='stream' ? (DATA.streamDecks||[]) : DATA.decks;
+  const list = currentPreset.src==='stream' ? (DATA.streamDecks||[])
+             : currentPreset.src==='user' ? (DATA.userDecks||[])
+             : DATA.decks;
   return list[currentPreset.idx] || null;
 }
 function loadPreset(i){ loadDeckDef('tier', i); }
@@ -775,24 +804,141 @@ function renderPresetNote(){
   note.innerHTML = html;
 }
 
+// ── 유저 등록 덱 (Firebase Firestore REST — 설정이 비어 있으면 기능 자동 비활성) ──
+const FB = { projectId: '', apiKey: '' }; // ★ Firebase 콘솔에서 받은 값을 채우면 활성화
+const fbOn = () => FB.projectId && FB.apiKey;
+const fbBase = () => `https://firestore.googleapis.com/v1/projects/${FB.projectId}/databases/(default)/documents`;
+DATA.userDecks = [];
+
+async function fbLoadUserDecks(){
+  if(!fbOn()) return;
+  try{
+    const res = await fetch(`${fbBase()}:runQuery?key=${FB.apiKey}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({structuredQuery:{from:[{collectionId:'userDecks'}],
+        orderBy:[{field:{fieldPath:'ts'},direction:'DESCENDING'}], limit:100}})
+    });
+    const rows = await res.json();
+    DATA.userDecks = (rows||[]).filter(r=>r.document).map(r=>{
+      const f = r.document.fields;
+      let payload = {};
+      try{ payload = JSON.parse(f.payload.stringValue); }catch(e){}
+      const nick = (f.nick?.stringValue||'익명').slice(0,16);
+      const name = (f.name?.stringValue||'유저 덱').slice(0,24);
+      const desc = (f.desc?.stringValue||'').slice(0,400);
+      const ts = parseInt(f.ts?.integerValue||0);
+      const d0 = new Date(ts);
+      return {
+        name, nick, desc, ts, payload,
+        title: `👥 ${name} (등록: ${nick})`,
+        principle: desc,
+        source: {show: `유저 등록 덱 — ${nick}`, ts: `${d0.getFullYear()}-${d0.getMonth()+1}-${d0.getDate()}`},
+        generals: (payload.slots||[]).filter(Boolean),
+        tactics: (payload.slots||[]).map((s,i)=>(payload.tactics&&payload.tactics[i])||['','']),
+      };
+    }).filter(u=>u.generals.length>=1 && u.generals.every(g=>G[g]));
+    renderUserDecks();
+  }catch(e){ /* 네트워크 실패 시 조용히 무시 */ }
+}
+function renderUserDecks(){
+  const panel = document.getElementById('userDeckPanel');
+  if(!fbOn()){ panel.style.display='none'; return; }
+  panel.style.display='';
+  document.getElementById('regBtn').style.display='';
+  const box = document.getElementById('homeUser');
+  const dateStr = ts => { const d=new Date(ts); return `${d.getMonth()+1}/${d.getDate()}`; };
+  box.innerHTML = DATA.userDecks.map((u,i)=>{
+    const tacLines = u.generals.map((g,k)=>{
+      const ts2=(u.tactics[k]||[]).filter(Boolean);
+      return ts2.length?`<div class="h-tac"><span class="h-tacg">${esc(g)}</span><span>${ts2.map(rname).join(' · ')}</span></div>`:'';
+    }).filter(Boolean).join('');
+    return `<div class="hcard" data-g="${u.generals.join(',')}" data-n="${esc(u.name)}" onclick="loadUserDeck(${i})">
+      <span class="h-tier">[👥 ${esc(u.nick)} · ${dateStr(u.ts)}]</span>
+      <div class="h-name">${esc(u.name)}</div>
+      <div class="h-gen">${u.generals.map(g=>`<span class="chip f${G[g].faction}">${G[g].faction}</span>${g}`).join(' ')}</div>
+      ${tacLines?`<div class="h-tacs">${tacLines}</div>`:''}
+      ${u.desc?`<div class="h-cmt">${esc(u.desc.slice(0,90))}${u.desc.length>90?'…':''}</div>`:''}
+    </div>`;
+  }).join('') || '<p class="note">아직 등록된 덱이 없습니다. 첫 덱을 등록해 보세요!</p>';
+  filterDecks();
+}
+function loadUserDeck(i){
+  const u = DATA.userDecks[i];
+  if(!u) return;
+  deck = newDeck();
+  if(u.payload.formation && fmtByName(u.payload.formation)) deck.formation = u.payload.formation;
+  deck.slots = (u.payload.slots||[null,null,null]).map(s=>G[s]?s:null).concat([null,null,null]).slice(0,3);
+  deck.tactics = [0,1,2].map(k=>{
+    const p=(u.payload.tactics&&u.payload.tactics[k])||['',''];
+    return [T[p[0]]?p[0]:'', T[p[1]]?p[1]:''];
+  });
+  currentPreset = {src:'user', idx:i};
+  swapLog = {};
+  renderAll(); showEditor();
+}
+function openRegModal(){
+  if(!fbOn()) return;
+  if(deck.slots.filter(Boolean).length < 3){ alert('무장 3명을 모두 배치한 뒤 등록해 주세요.'); return; }
+  document.getElementById('regPreview').innerHTML =
+    '등록될 편성: <b>' + deck.slots.join('·') + '</b> / ' + deck.formation + '<br>전법: ' +
+    deck.slots.map((g,i)=>`${g}(${deck.tactics[i].filter(Boolean).join('·')||'-'})`).join(' / ');
+  document.getElementById('regMsg').textContent = '';
+  document.getElementById('regModal').classList.add('show');
+}
+async function submitReg(){
+  const nick = document.getElementById('regNick').value.trim();
+  const name = document.getElementById('regName').value.trim();
+  const desc = document.getElementById('regDesc').value.trim();
+  const msg = document.getElementById('regMsg');
+  if(!nick || !name){ msg.textContent = '닉네임과 덱 이름을 입력해 주세요.'; return; }
+  const last = +(localStorage.getItem('tcgd_lastReg')||0);
+  if(Date.now() - last < 5*60*1000){ msg.textContent = '도배 방지: 5분에 1개만 등록할 수 있습니다.'; return; }
+  const btn = document.getElementById('regSubmit');
+  btn.disabled = true; msg.textContent = '등록 중…';
+  const payload = JSON.stringify({formation: deck.formation, slots: deck.slots, tactics: deck.tactics});
+  try{
+    const res = await fetch(`${fbBase()}/userDecks?key=${FB.apiKey}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({fields:{
+        nick:{stringValue:nick.slice(0,12)}, name:{stringValue:name.slice(0,20)},
+        desc:{stringValue:desc.slice(0,300)}, payload:{stringValue:payload},
+        ts:{integerValue:String(Date.now())}
+      }})
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    localStorage.setItem('tcgd_lastReg', String(Date.now()));
+    msg.textContent = '✅ 등록 완료!';
+    await fbLoadUserDecks();
+    setTimeout(()=>{ closeModal('regModal'); goHome(); }, 700);
+  }catch(e){
+    msg.textContent = '등록 실패 — 잠시 후 다시 시도해 주세요. (' + e.message + ')';
+  }finally{ btn.disabled = false; }
+}
+
 // ── 덱 검색: 장수 이름(띄어쓰기 최대 3명, AND 조건)으로 홈 카드 필터 ──
 function filterDecks(){
   const raw = document.getElementById('deckSearch').value.trim();
   const tokens = raw ? raw.split(/\s+/).filter(Boolean).slice(0, 3) : [];
   if(tokens.length && document.body.classList.contains('home') === false) showHome();
-  let tierN = 0, streamN = 0;
+  let tierN = 0, streamN = 0, userN = 0;
   document.querySelectorAll('.hcard').forEach(el=>{
     const gens = (el.dataset.g || '').split(',');
     const nm = el.dataset.n || '';
     const ok = tokens.every(t => gens.some(g=>g.includes(t)) || nm.includes(t));
     el.classList.toggle('filtered-out', !ok);
-    if(ok){ el.closest('#homeTier') ? tierN++ : streamN++; }
+    if(ok){
+      if(el.closest('#homeTier')) tierN++;
+      else if(el.closest('#homeStream')) streamN++;
+      else if(el.closest('#homeUser')) userN++;
+    }
   });
   // 섹션 카운트 + 결과 없음 안내
   const tierHead = document.getElementById('homeTierCnt');
   const streamHead = document.getElementById('homeStreamCnt');
+  const userHead = document.getElementById('homeUserCnt');
   if(tierHead) tierHead.textContent = tokens.length ? ` — ${tierN}개 일치` : '';
   if(streamHead) streamHead.textContent = tokens.length ? ` — ${streamN}개 일치` : '';
+  if(userHead) userHead.textContent = tokens.length ? ` — ${userN}개 일치` : '';
   const setEmpty = (boxId, n)=>{
     const box = document.getElementById(boxId);
     let e = box.querySelector('.ds-empty');
@@ -975,7 +1121,7 @@ document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>
 function renderAll(){
   renderFormations(); renderSlots(); renderCombos(); renderBonds(); renderStats(); renderWarn(); renderPresetNote();
 }
-renderPresets(); renderHome(); showRef('counter'); updateOwnCnt(); renderAll(); showHome();
+renderPresets(); renderHome(); showRef('counter'); updateOwnCnt(); renderAll(); showHome(); fbLoadUserDecks();
 </script>
 </body>
 </html>
