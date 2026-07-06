@@ -88,6 +88,17 @@ input[type=text]{background:var(--panel2);color:var(--txt);border:1px solid var(
 .pick-row .desc{font-size:11.5px;color:var(--sub);margin-top:2px}
 .sortbar{margin-left:auto;display:flex;gap:4px;align-items:center;font-size:12px;color:var(--sub)}
 footer{color:#555;font-size:11px;text-align:center;padding:20px 0}
+/* ── 화면 전환 (홈/에디터) ── */
+body.home #editorView{display:none}
+body.home .editor-only{display:none}
+body:not(.home) #homeView{display:none}
+.home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.hcard{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;cursor:pointer;text-align:left}
+.hcard:hover{border-color:var(--gold);box-shadow:0 0 6px rgba(212,175,55,.25)}
+.hcard .h-tier{font-size:11px;font-weight:bold;color:var(--gold)}
+.hcard .h-name{font-size:15px;font-weight:bold;margin:2px 0}
+.hcard .h-gen{font-size:12.5px;color:var(--txt)}
+.hcard .h-cmt{font-size:11px;color:var(--sub);margin-top:3px}
 /* ── 모바일(아이폰/안드로이드 세로) 대응 ── */
 @media(max-width:600px){
   .topbar .actions{width:100%}
@@ -165,18 +176,33 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
   <div class="topbar">
     <h1>⚔ 삼국지: 천하결전 — 덱 세팅 시뮬레이터</h1>
     <div class="actions">
-      <select id="presetSel"><option value="">📋 티어덱 프리셋 불러오기…</option></select>
-      <select id="streamSel"><option value="">📺 방송 상담덱 불러오기…</option></select>
+      <button class="editor-only" onclick="showHome()">🏠 메인 화면</button>
+      <select id="presetSel" class="editor-only"><option value="">📋 티어덱 프리셋 불러오기…</option></select>
+      <select id="streamSel" class="editor-only"><option value="">📺 방송 상담덱 불러오기…</option></select>
       <button onclick="openOwnModal()">🎖 보유 무장 <span id="ownCnt"></span></button>
       <button onclick="openSearchModal()">🔍 조합 검색</button>
-      <button onclick="saveDeck()">💾 저장</button>
-      <select id="savedSel"><option value="">📂 내 덱 불러오기…</option></select>
-      <button class="danger" onclick="deleteSaved()">🗑</button>
-      <button onclick="openIO()">↕ 내보내기/가져오기</button>
-      <button class="danger" onclick="resetDeck()">초기화</button>
+      <button class="editor-only" onclick="openIO()">↕ 내보내기/가져오기</button>
+      <button class="danger editor-only" onclick="resetDeck()">초기화</button>
     </div>
   </div>
 
+  <!-- ── 메인(홈) 화면: 덱 카탈로그 ── -->
+  <div id="homeView">
+    <div class="panel">
+      <h2>📋 티어덱 프리셋 <span style="font-size:12px;color:var(--sub);font-weight:normal">— 카드를 누르면 편성 화면에서 열립니다</span></h2>
+      <div class="home-grid" id="homeTier"></div>
+    </div>
+    <div class="panel">
+      <h2>📺 방송 상담덱</h2>
+      <div class="home-grid" id="homeStream"></div>
+    </div>
+    <div class="panel" style="text-align:center">
+      <button class="primary" style="font-size:14px;padding:10px 22px" onclick="resetDeck();showEditor()">➕ 빈 덱으로 직접 편성하기</button>
+    </div>
+  </div>
+
+  <!-- ── 편성(에디터) 화면 ── -->
+  <div id="editorView">
   <div class="grid">
     <div>
       <div class="panel">
@@ -216,6 +242,7 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
       </div>
     </div>
   </div>
+  </div><!-- /editorView -->
   <footer>데이터 출처: (배포용) S1 삼국지: 천하결전 힛파비전 (Copyright © 2026 Edit by 힛파) · 삼국지_천하결전_공개용 — 개인 학습/시뮬레이션 용도</footer>
 </div>
 
@@ -514,7 +541,7 @@ function clearTactic(){ deck.tactics[pickTactic[0]][pickTactic[1]]=''; closeModa
 function renderPresets(){
   const sel = document.getElementById('presetSel');
   sel.innerHTML = '<option value="">📋 티어덱 프리셋 불러오기…</option>' +
-    DATA.decks.map((d,i)=>`<option value="${i}">[${d.tier}] ${d.title.replace(/^\S+\s/,'')}</option>`).join('');
+    DATA.decks.map((d,i)=>`<option value="${i}">[${d.tier}] ${d.name} — ${d.generals.join('·')}</option>`).join('');
   const ssel = document.getElementById('streamSel');
   const sd = DATA.streamDecks || [];
   ssel.innerHTML = '<option value="">📺 방송 상담덱 불러오기…</option>' +
@@ -586,6 +613,7 @@ function loadDeckDef(src, i){
     deck.tactics[k] = [...((gi>=0 && p.tactics[gi]) || ['',''])];
   });
   renderAll();
+  showEditor();
 }
 // 슬롯 위치 이동(무장+전법 함께 스왑)
 function moveSlot(i, d){
@@ -729,32 +757,20 @@ function renderPresetNote(){
   note.innerHTML = html;
 }
 
-// ── 저장/불러오기 ──
-const LS = 'tcgd_decks_v1';
-function getSaved(){ try{ return JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){ return {}; } }
-function saveDeck(){
-  const name = prompt('덱 이름을 입력하세요:', deck.slots.filter(Boolean).join('·')||'내 덱');
-  if(!name) return;
-  const s = getSaved(); s[name] = deck;
-  localStorage.setItem(LS, JSON.stringify(s));
-  renderSaved();
-}
-function renderSaved(){
-  const sel = document.getElementById('savedSel');
-  const s = getSaved();
-  sel.innerHTML = '<option value="">📂 내 덱 불러오기…</option>' +
-    Object.keys(s).map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('');
-  sel.onchange = ()=>{
-    if(sel.value){ deck = JSON.parse(JSON.stringify(s[sel.value])); currentPreset = null; renderAll(); }
-    sel.selectedIndex = 0;
-  };
-}
-function deleteSaved(){
-  const s = getSaved();
-  const keys = Object.keys(s);
-  if(!keys.length) return alert('저장된 덱이 없습니다.');
-  const name = prompt('삭제할 덱 이름:\n' + keys.join(', '));
-  if(name && s[name]){ delete s[name]; localStorage.setItem(LS, JSON.stringify(s)); renderSaved(); }
+// ── 화면 전환 (홈/에디터) ──
+function showHome(){ document.body.classList.add('home'); window.scrollTo(0,0); }
+function showEditor(){ document.body.classList.remove('home'); window.scrollTo(0,0); }
+function renderHome(){
+  const card = (d, onclick, badge)=>`<div class="hcard" onclick="${onclick}">
+      <span class="h-tier">${badge}</span>
+      <div class="h-name">${esc(d.name)}</div>
+      <div class="h-gen">${d.generals.map(g=>`<span class="chip f${G[g]?G[g].faction:''}">${G[g]?G[g].faction:''}</span>${g}`).join(' ')}</div>
+      ${d.comment?`<div class="h-cmt">${esc(d.comment)}</div>`:''}
+    </div>`;
+  document.getElementById('homeTier').innerHTML =
+    DATA.decks.map((d,i)=>card(d, `loadPreset(${i})`, `[${d.tier}]`)).join('');
+  document.getElementById('homeStream').innerHTML =
+    (DATA.streamDecks||[]).map((d,i)=>card(d, `loadStream(${i})`, `[${d.grade||'방송'}]`)).join('');
 }
 function resetDeck(){ deck = newDeck(); currentPreset = null; renderAll(); }
 function openIO(){
@@ -1019,7 +1035,7 @@ function renderAll(){
   renderFormations(); renderSlots(); renderCombos(); renderBonds(); renderStats(); renderWarn(); renderPresetNote();
   const db = document.getElementById('diagBox'); if(db) db.innerHTML = ''; // 편성 변경 시 이전 진단 무효화
 }
-renderPresets(); renderSaved(); showRef('counter'); updateOwnCnt(); renderAll();
+renderPresets(); renderHome(); showRef('counter'); updateOwnCnt(); renderAll(); showHome();
 </script>
 </body>
 </html>
