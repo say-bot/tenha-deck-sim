@@ -192,7 +192,7 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
   <div class="topbar">
     <h1 onclick="goHome()" style="cursor:pointer" title="메인 화면으로">⚔ 삼국지: 천하결전 — 덱조합 데이터베이스</h1>
     <div class="searchwrap">
-      <input type="text" id="deckSearch" placeholder="🔎 장수 검색 — 띄어쓰기로 최대 3명 (예: 유비 장비)" autocomplete="off"
+      <input type="text" id="deckSearch" placeholder="🔎 장수·전법 검색 — 장수 최대 3명 + 전법 1개 (예: 유비 장비 / 마초 파죽지세)" autocomplete="off"
              oninput="filterDecks()">
     </div>
     <div class="actions">
@@ -852,7 +852,7 @@ function renderUserDecks(){
       const ts2=(u.tactics[k]||[]).filter(Boolean);
       return ts2.length?`<div class="h-tac"><span class="h-tacg">${esc(g)}</span><span>${ts2.map(rname).join(' · ')}</span></div>`:'';
     }).filter(Boolean).join('');
-    return `<div class="hcard" data-g="${u.generals.join(',')}" data-n="${esc(u.name)}" onclick="loadUserDeck(${i})">
+    return `<div class="hcard" data-g="${u.generals.join(',')}" data-t="${(u.tactics||[]).flat().filter(Boolean).join(',')}" data-n="${esc(u.name)}" onclick="loadUserDeck(${i})">
       <span class="h-tier">[👥 ${esc(u.nick)} · ${dateStr(u.ts)}]</span>
       <div class="h-name">${esc(u.name)}</div>
       <div class="h-gen">${u.generals.map(g=>`<span class="chip f${G[g].faction}">${G[g].faction}</span>${g}`).join(' ')}</div>
@@ -915,16 +915,31 @@ async function submitReg(){
   }finally{ btn.disabled = false; }
 }
 
-// ── 덱 검색: 장수 이름(띄어쓰기 최대 3명, AND 조건)으로 홈 카드 필터 ──
+// ── 덱 검색: 장수(최대 3명, AND) + 전법(1개) 으로 홈 카드 필터 ──
+// 토큰 분류: 장수 이름에 안 걸리고 전법 이름에 걸리면 전법 토큰(첫 1개만 유효),
+// 그 외(장수·덱 이름)는 기존과 동일하게 최대 3개 AND.
 function filterDecks(){
   const raw = document.getElementById('deckSearch').value.trim();
-  const tokens = raw ? raw.split(/\s+/).filter(Boolean).slice(0, 3) : [];
+  const allTok = raw ? raw.split(/\s+/).filter(Boolean) : [];
+  const gnames = Object.keys(G);
+  const tnames = DATA.tactics.map(t=>t.name);
+  const gTokens = [];
+  let tToken = null;
+  for(const t of allTok){
+    const isGen = gnames.some(n=>n.includes(t));
+    const isTac = tnames.some(n=>n.includes(t));
+    if(!isGen && isTac){ if(!tToken) tToken = t; }          // 전법 토큰은 1개만
+    else if(gTokens.length < 3) gTokens.push(t);            // 장수/덱 이름 토큰 최대 3개
+  }
+  const tokens = tToken ? gTokens.concat([tToken]) : gTokens; // 표시·빈결과 안내용
   if(tokens.length && document.body.classList.contains('home') === false) showHome();
   let tierN = 0, streamN = 0, userN = 0;
   document.querySelectorAll('.hcard').forEach(el=>{
     const gens = (el.dataset.g || '').split(',');
+    const tacs = (el.dataset.t || '').split(',');
     const nm = el.dataset.n || '';
-    const ok = tokens.every(t => gens.some(g=>g.includes(t)) || nm.includes(t));
+    const ok = gTokens.every(t => gens.some(g=>g.includes(t)) || nm.includes(t))
+            && (!tToken || tacs.some(x=>x.includes(tToken)));
     el.classList.toggle('filtered-out', !ok);
     if(ok){
       if(el.closest('#homeTier')) tierN++;
@@ -980,7 +995,7 @@ function renderHome(){
     if(d.strong && d.strong.length) tip.push(`<div class="tip-sec"><b style="color:#7fc97f">💪 이런 상대에 강함</b>${d.strong.map(x=>`<div>· ${esc(trimEg(x))}</div>`).join('')}</div>`);
     if(d.weak && d.weak.length) tip.push(`<div class="tip-sec"><b style="color:var(--red)">⚠ 약점</b>${d.weak.map(x=>`<div>· ${esc(trimEg(x))}</div>`).join('')}</div>`);
     const tipHtml = tip.length ? `<div class="h-tip">${tip.join('')}<div style="color:var(--sub);margin-top:4px">클릭하면 편성 화면에서 상세(카운터 예시 포함)를 볼 수 있습니다</div></div>` : '';
-    return `<div class="hcard" data-g="${d.generals.join(',')}" data-n="${esc(d.name)}" onclick="${onclick}">
+    return `<div class="hcard" data-g="${d.generals.join(',')}" data-t="${(d.tactics||[]).flat().filter(Boolean).join(',')}" data-n="${esc(d.name)}" onclick="${onclick}">
       <span class="h-tier">${badge}</span>
       <div class="h-name">${esc(d.name)}</div>
       <div class="h-gen">${d.generals.map(g=>`<span class="chip f${G[g]?G[g].faction:''}">${G[g]?G[g].faction:''}</span>${g}`).join(' ')}</div>
