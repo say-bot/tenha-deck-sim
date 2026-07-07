@@ -274,10 +274,7 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
       </div>
     </div>
     <div>
-      <div class="panel" id="savePanel" style="display:none;text-align:center">
-        <button class="primary" id="regBtn" style="font-size:16px;font-weight:bold;padding:13px 28px;width:100%" onclick="openRegModal()">💾 저장하기</button>
-        <div class="note" style="margin-top:6px">편성한 덱을 등록해 모두와 공유합니다 (닉네임·비밀번호 필요)</div>
-      </div>
+      <div class="panel" id="savePanel" style="display:none;text-align:center"></div>
       <div class="panel">
         <h2>조합 보너스</h2>
         <div id="comboBox"></div>
@@ -993,14 +990,13 @@ async function fbLoadUserDecks(){
     renderUserDecks();
   }catch(e){ /* 네트워크 실패 시 조용히 무시 */ }
 }
-let userSort = 'new';   // 'new' | 'likes'
+let userSort = 'likes';   // 'new' | 'likes' — 기본은 좋아요 많은 순
 function setUserSort(s){ userSort = s; renderUserDecks(); }
 const getLiked = () => new Set(JSON.parse(localStorage.getItem('tcgd_liked')||'[]'));
 function renderUserDecks(){
   const panel = document.getElementById('userDeckPanel');
   if(!fbOn()){ panel.style.display='none'; return; }
   panel.style.display='';
-  document.getElementById('savePanel').style.display='';
   const sortCtl = document.getElementById('userSortCtl');
   if(sortCtl) sortCtl.innerHTML = DATA.userDecks.length
     ? `<button class="sortbtn ${userSort==='new'?'on':''}" onclick="setUserSort('new')">최신순</button><button class="sortbtn ${userSort==='likes'?'on':''}" onclick="setUserSort('likes')">👍 인기순</button>`
@@ -1053,12 +1049,79 @@ async function likeDeck(i){
     renderUserDecks();
   }
 }
-// 덱 공유 링크(#u=<docId>) 복사
-function copyDeckLink(docId, btn){
-  const url = location.origin + location.pathname + '#u=' + docId;
+// 덱 공유 링크(#u=<docId>) 복사 (홈 유저덱 카드용)
+function copyDeckLink(docId, btn){ copyToClip(location.origin + location.pathname + '#u=' + docId, btn); }
+function copyToClip(url, btn){
   navigator.clipboard.writeText(url).then(()=>{
-    if(btn){ const o=btn.innerHTML; btn.innerHTML='✅ 복사됨'; setTimeout(()=>btn.innerHTML=o, 1400); }
+    if(btn){ const o=btn.innerHTML; btn.innerHTML='✅ 복사됨'; setTimeout(()=>btn.innerHTML=o, 1500); }
   }).catch(()=>{ prompt('아래 링크를 복사하세요:', url); });
+}
+// URL-safe base64 (UTF-8)
+function b64url(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function unb64url(s){ s=s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; return decodeURIComponent(escape(atob(s))); }
+function encodeComposition(){ return b64url(JSON.stringify({f:deck.formation, s:deck.slots, t:deck.tactics})); }
+function decodeComposition(enc){ try{ return JSON.parse(unb64url(enc)); }catch(e){ return null; } }
+// #d=<인코딩> 공유 링크를 편성으로 복원 (미등록 편성 취급)
+function loadSharedComposition(enc, fromHash){
+  const p = decodeComposition(enc);
+  if(!p || !p.s) return false;
+  deck = newDeck();
+  if(p.f && fmtByName(p.f)) deck.formation = p.f;
+  deck.slots = (p.s||[null,null,null]).map(s=>G[s]?s:null).concat([null,null,null]).slice(0,3);
+  deck.tactics = [0,1,2].map(k=>{ const pt=(p.t&&p.t[k])||['','']; return [T[pt[0]]?pt[0]:'', T[pt[1]]?pt[1]:'']; });
+  regAlts = {}; currentPreset = null; swapLog = {};
+  renderAll();
+  document.body.classList.remove('home'); window.scrollTo(0,0);
+  const hash = '#d=' + enc;
+  if(fromHash) history.replaceState({v:'shared'}, '', hash);
+  else if(location.hash !== hash) history.pushState({v:'shared'}, '', hash);
+  return true;
+}
+// 편집화면 '공유하기': 저장된 유저덱이면 퍼머링크, 아니면 편성 자체 링크(#d=)
+function shareCurrentDeck(btn){
+  if(deck.slots.filter(Boolean).length === 0){ alert('무장을 먼저 배치해 주세요.'); return; }
+  const src = currentPreset ? currentPreset.src : null;
+  let url;
+  if(src === 'user' && DATA.userDecks[currentPreset.idx] && DATA.userDecks[currentPreset.idx].docId)
+    url = location.origin + location.pathname + '#u=' + DATA.userDecks[currentPreset.idx].docId;
+  else
+    url = location.origin + location.pathname + '#d=' + encodeComposition();
+  copyToClip(url, btn);
+}
+// 현재 연 '내 덱'을 그 docId로 덮어쓰기(수정)
+function editCurrentDeck(){
+  if(!(currentPreset && currentPreset.src === 'user')) return;
+  const u = DATA.userDecks[currentPreset.idx];
+  if(!u || !isMine(u)){ alert('로그인이 필요합니다.'); return; }
+  regEditId = u.docId; regEditTs = u.ts || Date.now(); regEditLikes = u.likes || 0;
+  _showRegModal();
+  document.getElementById('regNick').value = u.nick;
+  document.getElementById('regName').value = u.name;
+  document.getElementById('regDesc').value = u.desc;
+}
+// 편집화면 저장/공유 버튼 영역 — 로그인·덱 종류에 따라 다르게
+function renderSaveBar(){
+  const panel = document.getElementById('savePanel');
+  if(!panel) return;
+  if(!fbOn()){ panel.style.display='none'; return; }
+  panel.style.display='';
+  const src = currentPreset ? currentPreset.src : null;
+  const loggedIn = !!(AUTH.uid && AUTH.nick);
+  const isNew = (src === null);
+  const u = (src === 'user') ? DATA.userDecks[currentPreset.idx] : null;
+  const mineUser = !!(u && isMine(u));
+  const bigBtn = (label, fn)=>`<button class="primary" style="font-size:16px;font-weight:bold;padding:13px 28px;width:100%" onclick="${fn}">${label}</button>`;
+  const shareBtn = (mt)=>`<button style="font-size:14px;padding:11px 24px;width:100%;margin-top:${mt}" onclick="shareCurrentDeck(this)">🔗 공유하기</button>`;
+  let html = '';
+  if(loggedIn && isNew) html += bigBtn('💾 저장하기', 'openRegModal()');
+  else if(loggedIn && mineUser) html += bigBtn('✏ 수정하기', 'editCurrentDeck()');
+  html += shareBtn(html ? '8px' : '0');
+  if(!loggedIn)
+    html += `<div class="note" style="margin-top:8px">덱을 <b>저장</b>하려면 <a onclick="openLogin()" style="color:#5c9de0;cursor:pointer;text-decoration:underline">로그인 / 가입</a>이 필요합니다</div>`;
+  else if(isNew) html += `<div class="note" style="margin-top:6px">편성한 덱을 저장해 공유하세요</div>`;
+  else if(mineUser) html += `<div class="note" style="margin-top:6px">내 덱 — 수정해 다시 저장할 수 있어요</div>`;
+  else html += `<div class="note" style="margin-top:6px">이 편성을 링크로 공유하세요</div>`;
+  panel.innerHTML = html;
 }
 function loadUserDeck(i, fromHash){
   const u = DATA.userDecks[i];
@@ -1124,13 +1187,13 @@ function _showRegModal(){
   updateRegPreview();
   document.getElementById('regMsg').textContent = '';
   const editing = !!regEditId;
-  // 수정 시엔 이미 로그인된 상태 → 닉네임 고정·비밀번호 입력 숨김
+  const loggedIn = !!(AUTH.uid && AUTH.nick);
+  // 저장/수정은 로그인 상태에서만 진입 → 닉네임 고정·비밀번호 칸 숨김
   const nickEl = document.getElementById('regNick'), pwEl = document.getElementById('regPw');
-  nickEl.disabled = editing;
-  pwEl.style.display = editing ? 'none' : '';
-  // 이미 로그인돼 있으면 그 닉네임을 기본값으로(비번 재입력 불필요)
+  nickEl.disabled = editing || loggedIn;
+  pwEl.style.display = (editing || loggedIn) ? 'none' : '';
   if(!editing){
-    if(AUTH.nick){ nickEl.value = AUTH.nick; pwEl.placeholder = '비밀번호 (로그인됨 — 비워도 됨)'; pwEl.required = false; }
+    if(loggedIn){ nickEl.value = AUTH.nick; }
     else { pwEl.placeholder = '비밀번호 (6자 이상 · 수정/삭제 시 필요)'; }
   }
   document.getElementById('regTitle').textContent = editing ? '✏ 덱 수정' : '💾 덱 저장';
@@ -1241,11 +1304,11 @@ async function doLogin(){
   btn.disabled = false;
   if(!res.ok){ msg.textContent = loginErr(res.code); return; }
   msg.textContent = '✅ 로그인됨';
-  renderAuthStatus();
+  renderAuthStatus(); renderSaveBar();      // 편집화면 저장/공유 버튼도 갱신
   await fbLoadUserDecks();       // 내 덱 카드에 수정/삭제 버튼 반영
   setTimeout(()=>closeModal('loginModal'), 600);
 }
-function doLogout(){ fbLogout(); renderAuthStatus(); renderUserDecks(); }
+function doLogout(){ fbLogout(); renderAuthStatus(); renderSaveBar(); renderUserDecks(); }
 async function submitReg(){
   const nick = document.getElementById('regNick').value.trim();
   const name = document.getElementById('regName').value.trim();
@@ -1374,19 +1437,23 @@ function showEditor(){
 function goHome(){ // 🏠 버튼·타이틀 클릭: 검색 조건을 초기화하고 히스토리를 정리하며 홈으로
   const ds = document.getElementById('deckSearch');
   if(ds && ds.value){ ds.value=''; filterDecks(); }   // 검색 필터 초기화
-  if(location.hash === '#deck' || /^#u=/.test(location.hash)) history.back();
+  if(location.hash === '#deck' || /^#[ud]=/.test(location.hash)) history.back();
   else showHome();
 }
 window.addEventListener('popstate', ()=>{
-  const m = location.hash.match(/^#u=(.+)$/);
-  if(m && loadUserDeckById(decodeURIComponent(m[1]), true)) return;   // 공유 링크 덱으로 이동
+  const mu = location.hash.match(/^#u=(.+)$/);
+  if(mu && loadUserDeckById(decodeURIComponent(mu[1]), true)) return;   // 등록 덱 공유 링크
+  const md = location.hash.match(/^#d=(.+)$/);
+  if(md && loadSharedComposition(md[1], true)) return;                  // 편성 공유 링크
   showHome();
 });
-// 초기 진입 시 #u=<docId> 공유 링크면 해당 덱을 연다(유저 덱 로드 후 호출)
+// 초기 진입 시 공유 링크(#u=등록덱 / #d=편성)면 해당 덱을 연다(유저 덱 로드 후 호출)
 function applyInitialHash(){
-  const m = location.hash.match(/^#u=(.+)$/);
-  if(m){ if(!loadUserDeckById(decodeURIComponent(m[1]), true)){ history.replaceState(null, '', location.pathname); showHome(); } }
-  else if(location.hash === '#deck') history.replaceState(null, '', location.pathname); // 새로고침 잔여 해시 정리
+  const mu = location.hash.match(/^#u=(.+)$/);
+  if(mu){ if(!loadUserDeckById(decodeURIComponent(mu[1]), true)){ history.replaceState(null, '', location.pathname); showHome(); } return; }
+  const md = location.hash.match(/^#d=(.+)$/);
+  if(md){ if(!loadSharedComposition(md[1], true)){ history.replaceState(null, '', location.pathname); showHome(); } return; }
+  if(location.hash === '#deck') history.replaceState(null, '', location.pathname); // 새로고침 잔여 해시 정리
 }
 function renderHome(){
   const trimEg = s => String(s).split(' — 예:')[0].split('(예:')[0].replace(/\s+$/,'');
@@ -1542,7 +1609,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('show'); }
 document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('show'); }));
 
 function renderAll(){
-  renderFormations(); renderSlots(); renderCombos(); renderBonds(); renderStats(); renderWarn(); renderPresetNote();
+  renderFormations(); renderSlots(); renderCombos(); renderBonds(); renderStats(); renderWarn(); renderPresetNote(); renderSaveBar();
 }
 renderPresets(); renderHome(); showRef('counter'); updateOwnCnt(); renderAll(); showHome();
 fbRestoreSession().then(()=>{ renderAuthStatus(); return fbLoadUserDecks(); }).then(()=>{ applyInitialHash(); });
