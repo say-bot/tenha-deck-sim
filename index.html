@@ -56,6 +56,8 @@ input[type=text]{background:var(--panel2);color:var(--txt);border:1px solid var(
 .skillbox .sk-h{cursor:pointer;display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 .skillbox .sk-d{display:none;color:var(--sub);margin-top:5px;white-space:pre-wrap;font-size:11.5px}
 .skillbox.open .sk-d{display:block}
+.skillbox.static .sk-h{cursor:default}
+.bb-name{color:#9ecf9e;font-weight:bold}
 .rate{color:var(--gold);font-size:11px}
 .tslot{background:#171a22;border:1px dashed var(--line);border-radius:7px;padding:6px 8px;font-size:12px;cursor:pointer;color:var(--sub)}
 .tslot:hover{border-color:var(--gold)}
@@ -235,7 +237,7 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
   <div class="grid">
     <div>
       <div class="panel">
-        <h2>진형 선택</h2>
+        <h2>진형</h2>
         <div class="formations" id="fmtBox"></div>
       </div>
       <div class="panel">
@@ -393,18 +395,20 @@ let pickSlot = 0, pickTactic = [0,0];
 
 // ── 진형 ──
 function fmtByName(n){ return DATA.formations.find(f=>f.name===n); }
-function renderFormations(){
+function renderFormations(){ // 현재 덱의 진형 정보만 표시(선택 불가)
   const box = document.getElementById('fmtBox');
-  box.innerHTML = DATA.formations.map(f=>{
-    const lay = `전열 ${f.front} · 후열 ${f.back} <span style="color:var(--sub)">(피격 ${f.rates.join('/')}%)</span>`;
-    return `<div class="fmt ${deck.formation===f.name?'sel':''}" onclick="setFormation('${f.name}')">
-      <div class="nm">${f.name}</div><div class="lay">${lay}</div>
-      <div class="fx">${f.effects.map(e=>'· '+e).join('<br>')}</div></div>`;
-  }).join('');
+  const f = fmtByName(deck.formation);
+  if(!f){ box.innerHTML = ''; return; }
+  const lay = `전열 ${f.front} · 후열 ${f.back} <span style="color:var(--sub)">(피격 ${f.rates.join('/')}%)</span>`;
+  box.innerHTML = `<div class="fmt sel" style="cursor:default">
+    <div class="nm">${f.name}</div><div class="lay">${lay}</div>
+    <div class="fx">${f.effects.map(e=>'· '+e).join('<br>')}</div></div>`;
 }
 function setFormation(n){ deck.formation=n; renderAll(); }
 
 // ── 슬롯 ──
+// 병법 설명에서 <병법이름> 부분을 강조 표시
+function bbEmph(s){ return esc(s).replace(/&lt;(.*?)&gt;/g, '<b class="bb-name">&lt;$1&gt;</b>'); }
 function slotPos(i){
   const f = fmtByName(deck.formation);
   return i < f.front ? '전열' : '후열';
@@ -437,10 +441,10 @@ function renderSlots(){
         <div class="sk-h"><span class="chip t${g.skill.type}">${g.skill.type}</span><b>${g.skill.name}</b><span class="rate">${g.skill.rate}</span><span style="color:var(--sub);font-size:10px">▾ 고유 전법</span></div>
         <div class="sk-d">${esc(g.skill.desc)}</div>
       </div>
-      ${g.byeongbeop?`<div class="skillbox" onclick="this.classList.toggle('open')">
-        <div class="sk-h"><b style="color:#9ecf9e">병법</b><span style="color:var(--sub);font-size:10px">▾ 펼치기</span></div>
-        <div class="sk-d">${esc(g.byeongbeop)}</div></div>`:''}
       ${tacticHtml}
+      ${g.byeongbeop?`<div class="skillbox static open">
+        <div class="sk-h"><b style="color:#9ecf9e">병법</b></div>
+        <div class="sk-d">${bbEmph(g.byeongbeop)}</div></div>`:''}
       <button class="rm" onclick="removeG(${i})">제거</button>
     </div>`;
   }).join('');
@@ -974,7 +978,9 @@ function showEditor(){
   document.body.classList.remove('home');
   window.scrollTo(0,0);
 }
-function goHome(){ // 🏠 버튼·타이틀 클릭: 히스토리를 정리하며 홈으로
+function goHome(){ // 🏠 버튼·타이틀 클릭: 검색 조건을 초기화하고 히스토리를 정리하며 홈으로
+  const ds = document.getElementById('deckSearch');
+  if(ds && ds.value){ ds.value=''; filterDecks(); }   // 검색 필터 초기화
   if(location.hash === '#deck') history.back();
   else showHome();
 }
