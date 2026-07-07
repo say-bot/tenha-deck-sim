@@ -461,6 +461,10 @@ const DATA = {"generals":[{"name":"유비","faction":"촉","pos":"전열","tende
 const G = Object.fromEntries(DATA.generals.map(g=>[g.name,g]));
 const T = Object.fromEntries(DATA.tactics.map(t=>[t.name,t]));
 
+// 모바일 기기 판별 — 덱 저장·등록/수정은 PC에서만 제공(모바일은 편성·공유·좋아요만)
+let IS_MOBILE = /Mobi|Android|iPhone|iPad|iPod|IEMobile|BlackBerry|Opera Mini|Windows Phone|webOS/i.test(navigator.userAgent)
+  || (navigator.maxTouchPoints > 1 && window.matchMedia('(max-width: 820px)').matches);
+
 // ── 상태 ──
 let deck = newDeck();
 function newDeck(){ return { formation:'추형진', slots:[null,null,null], tactics:[['',''],['',''],['','']] }; }
@@ -1030,7 +1034,7 @@ function renderUserDecks(){
     }).filter(Boolean).join('');
     const mine = isMine(u), isLiked = liked.has(u.docId);
     return `<div class="hcard" data-mine="${mine?'1':'0'}" data-g="${u.generals.join(',')}" data-t="${(u.tactics||[]).flat().filter(Boolean).join(',')}" data-n="${esc(u.name)}" onclick="loadUserDeck(${i})">
-      ${mine?`<span class="mine-actions"><button title="수정" onclick="event.stopPropagation();editUserDeck(${i})">✏</button><button title="삭제" onclick="event.stopPropagation();deleteUserDeck(${i})">🗑</button></span>`:''}
+      ${mine?`<span class="mine-actions">${IS_MOBILE?'':`<button title="수정" onclick="event.stopPropagation();editUserDeck(${i})">✏</button>`}<button title="삭제" onclick="event.stopPropagation();deleteUserDeck(${i})">🗑</button></span>`:''}
       <span class="h-tier">[👥 ${esc(u.nick)} · ${dateStr(u.ts)}]${mine?'<span class="mine-badge">내 덱</span>':''}</span>
       <div class="h-name">${esc(u.name)}</div>
       <div class="h-gen">${u.generals.map(g=>`<span class="chip f${G[g].faction}">${G[g].faction}</span>${g}`).join(' ')}</div>
@@ -1106,6 +1110,7 @@ function shareCurrentDeck(btn){
 }
 // 현재 연 '내 덱'을 그 docId로 덮어쓰기(수정)
 function editCurrentDeck(){
+  if(IS_MOBILE){ alert('덱 수정은 PC에서만 가능합니다. (모바일은 편성 보기·공유만 제공)'); return; }
   if(!(currentPreset && currentPreset.src === 'user')) return;
   const u = DATA.userDecks[currentPreset.idx];
   if(!u || !isMine(u)){ alert('로그인이 필요합니다.'); return; }
@@ -1128,6 +1133,12 @@ function renderSaveBar(){
   const mineUser = !!(u && isMine(u));
   const bigBtn = (label, fn)=>`<button class="primary" style="font-size:16px;font-weight:bold;padding:13px 28px;width:100%" onclick="${fn}">${label}</button>`;
   const shareBtn = (mt)=>`<button style="font-size:14px;padding:11px 24px;width:100%;margin-top:${mt}" onclick="shareCurrentDeck(this)">🔗 공유하기</button>`;
+  // 모바일: 덱 저장·등록/수정은 PC 전용 → 공유하기만 + 안내
+  if(IS_MOBILE){
+    panel.innerHTML = shareBtn('0')
+      + `<div class="note" style="margin-top:8px">📱 <b>덱 저장·등록은 PC에서만</b> 가능합니다. (모바일에서는 편성 보기·공유만 제공)</div>`;
+    return;
+  }
   let html = '';
   if(loggedIn && isNew) html += bigBtn('💾 저장하기', 'openRegModal()');
   else if(loggedIn && mineUser) html += bigBtn('✏ 수정하기', 'editCurrentDeck()');
@@ -1218,6 +1229,7 @@ function _showRegModal(){
 }
 function openRegModal(){   // 신규 저장
   if(!fbOn()) return;
+  if(IS_MOBILE){ alert('덱 저장·등록은 PC에서만 가능합니다. (모바일은 편성 보기·공유만 제공)'); return; }
   if(deck.slots.filter(Boolean).length < 3){ alert('무장 3명을 모두 배치한 뒤 저장해 주세요.'); return; }
   regEditId = null; regEditTs = 0; regEditLikes = 0;
   document.getElementById('regNick').value = AUTH.nick || '';
@@ -1227,6 +1239,7 @@ function openRegModal(){   // 신규 저장
   _showRegModal();
 }
 function editUserDeck(i){  // 내 덱 수정
+  if(IS_MOBILE){ alert('덱 수정은 PC에서만 가능합니다. (모바일은 편성 보기·공유만 제공)'); return; }
   const u = DATA.userDecks[i];
   if(!u || !isMine(u)){ alert('이 덱을 수정하려면 등록에 쓴 닉네임·비밀번호로 로그인하세요.'); return; }
   loadUserDeck(i);                       // 편집기에 로드(진형·슬롯·전법·유사전법 반영)
