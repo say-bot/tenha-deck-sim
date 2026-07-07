@@ -24,7 +24,8 @@ button,select{background:var(--panel2);color:var(--txt);border:1px solid var(--l
 button:hover{border-color:var(--gold)}
 button.primary{background:var(--gold);color:#1a1a1a;font-weight:bold}
 button.danger{color:var(--red)}
-input[type=text]{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:13px}
+input[type=text],input[type=password]{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:13px}
+input[type=text]:focus,input[type=password]:focus,textarea:focus,select:focus{outline:none;border-color:var(--gold)}
 .grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}
 @media(max-width:900px){.grid{grid-template-columns:1fr}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
@@ -89,7 +90,7 @@ input[type=text]{background:var(--panel2);color:var(--txt);border:1px solid var(
 .pick-row .info{flex:1}
 .pick-row .desc{font-size:11.5px;color:var(--sub);margin-top:2px}
 .sortbar{margin-left:auto;display:flex;gap:4px;align-items:center;font-size:12px;color:var(--sub)}
-footer{color:#555;font-size:11px;text-align:center;padding:20px 0}
+footer{color:#7d8496;font-size:11px;text-align:center;padding:20px 0}
 /* ── 덱 검색창 (홈 카드 필터) ── */
 .searchwrap{position:relative;flex:1 1 260px;min-width:200px;max-width:480px}
 .searchwrap input{width:100%}
@@ -142,7 +143,7 @@ body:not(.home) #homeView{display:none}
   .tslot{padding:9px 10px}
   .fchip{padding:6px 11px}
   .own-chip{padding:7px 13px}
-  input[type=text]{font-size:16px}          /* iOS 포커스 자동 줌 방지 */
+  input[type=text],input[type=password]{font-size:16px}          /* iOS 포커스 자동 줌 방지 */
   textarea{font-size:16px}
   .modal-bg{padding:10px 4px}
   .modal{max-height:94vh;max-height:94dvh}  /* iOS 주소창 변동 대응 */
@@ -907,9 +908,11 @@ async function fbLoadUserDecks(){
       const f = r.document.fields;
       let payload = {};
       try{ payload = JSON.parse(f.payload.stringValue); }catch(e){}
-      const nick = (f.nick?.stringValue||'익명').slice(0,16);
-      const name = (f.name?.stringValue||'유저 덱').slice(0,24);
-      const desc = (f.desc?.stringValue||'').slice(0,400);
+      // NFC 정규화: 일부 IME/OS가 남기는 분해형(NFD) 한글이 자모로 쪼개져 보이는 문제 교정
+      const nfc = s => String(s||'').normalize('NFC');
+      const nick = nfc(f.nick?.stringValue||'익명').slice(0,16);
+      const name = nfc(f.name?.stringValue||'유저 덱').slice(0,24);
+      const desc = nfc(f.desc?.stringValue||'').slice(0,400);
       const ts = parseInt(f.ts?.integerValue||0);
       const owner = f.owner?.stringValue || '';
       const docId = (r.document.name||'').split('/').pop();
@@ -989,8 +992,13 @@ function renderRegAlts(){
         `</div>`;
     });
   });
+  const selCount = Object.values(regAlts).reduce((n,a)=>n+(a?a.length:0), 0);
+  // 접이식(기본 접힘)으로 등록 화면이 과하게 길어지지 않게 함
   box.innerHTML = rows
-    ? `<div class="note" style="margin:2px 0"><b style="color:#5c9de0">🔁 유사 전법 등록 (선택)</b> — 보는 사람이 해당 전법이 없을 때 대체할 수 있도록, 추천하는 유사 전법을 골라 함께 공유합니다.</div>${rows}`
+    ? `<details${selCount?' open':''} style="border:1px solid var(--line);border-radius:7px;padding:6px 9px">
+        <summary style="cursor:pointer;font-size:12.5px"><b style="color:#5c9de0">🔁 유사 전법 등록 (선택)</b>${selCount?` <span style="color:var(--gold)">· ${selCount}개 선택됨</span>`:' — 펼쳐서 추천 전법 고르기'}</summary>
+        <div class="note" style="margin:6px 0 2px">보는 사람이 해당 전법이 없을 때 대체할 수 있도록, 추천하는 유사 전법을 골라 함께 공유합니다.</div>${rows}
+      </details>`
     : '';
 }
 function updateRegPreview(){
