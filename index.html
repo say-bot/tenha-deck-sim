@@ -356,6 +356,7 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
         <input type="text" id="regNick" maxlength="12" placeholder="닉네임 (최대 12자)">
         <input type="text" id="regName" maxlength="20" placeholder="덱 이름 (최대 20자, 예: 마초 원맨캐리)">
         <textarea id="regDesc" maxlength="300" style="height:110px" placeholder="덱 설명 — 어떻게 굴러가는 덱인지, 필수 조건은 무엇인지 (최대 300자)"></textarea>
+        <div id="regAltsBox"></div>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="primary" id="regSubmit" onclick="submitReg()">등록하기</button>
           <span class="note" id="regMsg"></span>
@@ -795,6 +796,9 @@ function renderPresetNote(){
       const t = T[tn]; if(!t) return;
       const {similar} = tacticSubs(tn);
       html += `<div style="margin:5px 0 2px"><b>${gname}</b>의 <b>${rcolor(tn)}</b> <span class="chip t${t.type}">${t.type}</span><span class="chip troop">${t.trait}</span>`;
+      // 등록자(유저 덱)가 직접 등록한 유사 전법 우선 표시
+      const auth = (currentPreset && currentPreset.src==='user' && p.payload && p.payload.alts && p.payload.alts[i+'-'+j] || []).filter(n=>T[n]);
+      if(auth.length) html += `<br>　<span style="color:var(--gold)">👤 등록자 추천</span>: ` + auth.map(n=>`<button style="font-size:11px;padding:1px 8px;margin:1px" title="${esc(T[n].desc)}" onclick="equipT(${i},${j},'${n}')">${rcolor(n)} <span style="color:var(--sub)">${T[n].rate}</span></button>`).join(' ');
       if(similar.length) html += `<br>　유사 전법: ` + similar.map(s=>`<button style="font-size:11px;padding:1px 8px;margin:1px" title="${esc(s.desc)}" onclick="equipT(${i},${j},'${s.name}')">${rcolor(s.name)} <span style="color:var(--sub)">${s.rate}</span></button>`).join(' ');
       html += `</div>`;
     });
@@ -880,6 +884,35 @@ function loadUserDeck(i){
   swapLog = {};
   renderAll(); showEditor();
 }
+// 등록자가 직접 고르는 유사 전법(대체 전법). key='슬롯-전법칸' → 전법명 배열
+let regAlts = {};
+function toggleRegAlt(key, name){
+  const arr = regAlts[key] || (regAlts[key] = []);
+  const k = arr.indexOf(name);
+  if(k>=0) arr.splice(k,1); else arr.push(name);
+  renderRegAlts();
+}
+function renderRegAlts(){
+  const box = document.getElementById('regAltsBox');
+  if(!box) return;
+  let rows = '';
+  deck.slots.forEach((gname,i)=>{
+    if(!gname) return;
+    (deck.tactics[i]||[]).forEach((tn,j)=>{
+      if(!tn) return;
+      const {similar} = tacticSubs(tn);
+      if(!similar.length) return;
+      const key = i+'-'+j;
+      const sel = regAlts[key] || [];
+      rows += `<div style="margin:5px 0"><b>${esc(gname)}</b>의 <b>${rcolor(tn)}</b> 대신 쓸 수 있는 유사 전법:<br>` +
+        similar.map(s=>`<span class="fchip ${sel.includes(s.name)?'on':''}" style="font-size:11px;margin:3px 3px 0 0" title="${esc(s.desc)}" onclick="toggleRegAlt('${key}','${esc(s.name)}')">${s.name} <span style="color:var(--sub)">${s.rate}</span></span>`).join('') +
+        `</div>`;
+    });
+  });
+  box.innerHTML = rows
+    ? `<div class="note" style="margin:2px 0"><b style="color:#5c9de0">🔁 유사 전법 등록 (선택)</b> — 보는 사람이 해당 전법이 없을 때 대체할 수 있도록, 추천하는 유사 전법을 골라 함께 공유합니다.</div>${rows}`
+    : '';
+}
 function openRegModal(){
   if(!fbOn()) return;
   if(deck.slots.filter(Boolean).length < 3){ alert('무장 3명을 모두 배치한 뒤 등록해 주세요.'); return; }
@@ -887,6 +920,8 @@ function openRegModal(){
     '등록될 편성: <b>' + deck.slots.join('·') + '</b> / ' + deck.formation + '<br>전법: ' +
     deck.slots.map((g,i)=>`${g}(${deck.tactics[i].filter(Boolean).join('·')||'-'})`).join(' / ');
   document.getElementById('regMsg').textContent = '';
+  regAlts = {};
+  renderRegAlts();
   document.getElementById('regModal').classList.add('show');
 }
 async function submitReg(){
@@ -899,7 +934,9 @@ async function submitReg(){
   if(Date.now() - last < 5*60*1000){ msg.textContent = '도배 방지: 5분에 1개만 등록할 수 있습니다.'; return; }
   const btn = document.getElementById('regSubmit');
   btn.disabled = true; msg.textContent = '등록 중…';
-  const payload = JSON.stringify({formation: deck.formation, slots: deck.slots, tactics: deck.tactics});
+  const alts = {};
+  Object.keys(regAlts).forEach(k=>{ if(regAlts[k] && regAlts[k].length) alts[k] = regAlts[k]; });
+  const payload = JSON.stringify({formation: deck.formation, slots: deck.slots, tactics: deck.tactics, alts});
   try{
     const res = await fetch(`${fbBase()}/userDecks?key=${FB.apiKey}`, {
       method:'POST', headers:{'Content-Type':'application/json'},
