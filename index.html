@@ -124,6 +124,17 @@ body:not(.home) #homeView{display:none}
 .alt-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:2px 0 4px;padding-left:3px}
 .alt-lbl{font-size:10px;color:var(--sub);margin-right:2px}
 .fchip.mini{font-size:10px;padding:2px 7px;margin:0}
+/* 대체 전법 가이드 (프리셋 노트) */
+.altg{margin:7px 0;padding:8px 10px;background:#171a22;border:1px solid var(--line);border-radius:8px}
+.altg-h{display:flex;flex-wrap:wrap;align-items:center;gap:5px;font-size:12.5px}
+.altg-h .g{color:var(--sub)}
+.altg-h .g::after{content:"›";margin-left:4px;color:var(--sub)}
+.altg-grp{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px;margin-top:6px}
+.altg-lbl{font-size:11px;color:var(--sub);white-space:nowrap;flex:0 0 auto}
+.alt-pill{font-size:11.5px;padding:3px 11px;border:1px solid var(--line);background:var(--panel2);border-radius:13px;cursor:pointer;color:var(--txt)}
+.alt-pill:hover{border-color:var(--gold)}
+.alt-pill.author{border-color:var(--gold);background:rgba(212,175,55,.08)}
+.alt-pill .rt{color:#e0a05c;font-size:10px;margin-left:4px}
 .hcard .h-tier{font-size:11px;font-weight:bold;color:var(--gold)}
 .hcard .h-name{font-size:15px;font-weight:bold;margin:2px 0}
 .hcard .h-gen{font-size:12.5px;color:var(--txt)}
@@ -878,22 +889,27 @@ function renderPresetNote(){
     }
   }
   // 전법 대체 가이드
-  html += `<details open style="margin-bottom:6px"><summary style="cursor:pointer"><b style="color:#5c9de0">🔁 추천 전법이 없을 때 — 대체 전법 가이드</b></summary>`;
+  const altPill = (name, i, j, author) => {
+    const t = T[name]; if(!t) return '';
+    const rt = (t.rate && t.rate !== '100%') ? `<span class="rt">${t.rate}</span>` : '';
+    return `<button class="alt-pill${author?' author':''}" title="${esc(t.desc)}" onclick="equipT(${i},${j},'${name}')">${rcolor(name)}${rt}</button>`;
+  };
+  let guide = '';
   deck.slots.forEach((gname,i)=>{
     if(!gname) return;
     (deck.tactics[i]||[]).forEach((tn,j)=>{
       if(!tn) return;
       const t = T[tn]; if(!t) return;
       const {similar} = tacticSubs(tn);
-      html += `<div style="margin:5px 0 2px"><b>${gname}</b>의 <b>${rcolor(tn)}</b> <span class="chip t${t.type}">${t.type}</span><span class="chip troop">${t.trait}</span>`;
-      // 등록자(유저 덱)가 직접 등록한 유사 전법 우선 표시
       const auth = (currentPreset && currentPreset.src==='user' && p.payload && p.payload.alts && p.payload.alts[i+'-'+j] || []).filter(n=>T[n]);
-      if(auth.length) html += `<br>　<span style="color:var(--gold)">👤 등록자 추천</span>: ` + auth.map(n=>`<button style="font-size:11px;padding:1px 8px;margin:1px" title="${esc(T[n].desc)}" onclick="equipT(${i},${j},'${n}')">${rcolor(n)} <span style="color:var(--sub)">${T[n].rate}</span></button>`).join(' ');
-      if(similar.length) html += `<br>　유사 전법: ` + similar.map(s=>`<button style="font-size:11px;padding:1px 8px;margin:1px" title="${esc(s.desc)}" onclick="equipT(${i},${j},'${s.name}')">${rcolor(s.name)} <span style="color:var(--sub)">${s.rate}</span></button>`).join(' ');
-      html += `</div>`;
+      if(!auth.length && !similar.length) return;   // 대체가 없으면 생략(잡음 제거)
+      guide += `<div class="altg"><div class="altg-h"><span class="g">${esc(gname)}</span><b>${rcolor(tn)}</b><span class="chip t${t.type}">${t.type}</span><span class="chip troop">${t.trait}</span></div>`;
+      if(auth.length) guide += `<div class="altg-grp"><span class="altg-lbl" style="color:var(--gold)">👤 등록자 추천</span>${auth.map(n=>altPill(n,i,j,true)).join('')}</div>`;
+      if(similar.length) guide += `<div class="altg-grp"><span class="altg-lbl">🔁 유사 전법</span>${similar.map(s=>altPill(s.name,i,j,false)).join('')}</div>`;
+      guide += `</div>`;
     });
   });
-  html += `<div style="color:var(--sub);font-size:11px;margin-top:4px">※ 버튼을 누르면 그 자리에 바로 장착됩니다. 유사 전법 = 같은 유형·특성.</div></details>`;
+  if(guide) html += `<details open style="margin-bottom:6px"><summary style="cursor:pointer;margin-bottom:2px"><b style="color:#5c9de0">🔁 추천 전법이 없을 때 — 대체 전법 가이드</b></summary>${guide}<div style="color:var(--sub);font-size:11px;margin-top:6px">※ 버튼을 누르면 그 자리에 바로 장착됩니다. 유사 전법 = 같은 유형·특성. (발동률이 다른 경우만 % 표시)</div></details>`;
   // 기존 추천 정보 (티어덱 시트에만 존재)
   if(p.statRec) html += `<b>스탯 추천:</b> ${p.generals.map((g,k)=>`${g}→${p.statRec[k]||'-'}`).join(' / ')}\n<b>병법 추천:</b> ${p.generals.map((g,k)=>`${g}→${(p.byeongbeopSel||[])[k]||'-'}`).join(' / ')}\n<b>장비 특기(대장간/말/스탯):</b>\n${p.generals.map((g,k)=>`· ${g}: ${((p.equip||[])[k]||[]).filter(Boolean).join(' / ')}`).join('\n')}`;
   // 출처 (방송 상담덱)
