@@ -805,7 +805,7 @@ function renderPresetNote(){
 }
 
 // ── 유저 등록 덱 (Firebase Firestore REST — 설정이 비어 있으면 기능 자동 비활성) ──
-const FB = { projectId: '', apiKey: '' }; // ★ Firebase 콘솔에서 받은 값을 채우면 활성화
+const FB = { projectId: 'samchunmaemol', apiKey: 'AIzaSyBpFvSIrEIhK5I8EXLUBzOvh4uu7zIBhFw' }; // Firebase(samchundeck 웹앱)
 const fbOn = () => FB.projectId && FB.apiKey;
 const fbBase = () => `https://firestore.googleapis.com/v1/projects/${FB.projectId}/databases/(default)/documents`;
 DATA.userDecks = [];
