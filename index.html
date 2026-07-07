@@ -114,19 +114,17 @@ body:not(.home) #homeView{display:none}
 .hcard:hover{z-index:50;border-color:var(--gold)}
 .tip-sec{margin-bottom:8px}
 .tip-sec b{display:inline-block;margin-bottom:2px}
-/* 전법 정보 트리거(이름) + 팝오버 */
+/* 전법 정보 트리거(홈 카드 전법 이름) + 팝오버 — 데스크톱 전용 */
 .taci{cursor:help;border-bottom:1px dotted currentColor;border-bottom-color:rgba(255,255,255,.28)}
-#tacPop{display:none;position:fixed;z-index:70;background:#060709;border:2px solid var(--gold);border-radius:10px;padding:11px 13px;max-width:340px;font-size:12px;line-height:1.55;color:#f2f0e8;box-shadow:0 12px 30px rgba(0,0,0,.9),0 0 0 1px #000;pointer-events:none}
+#tacPop{display:none;position:absolute;bottom:calc(100% + 6px);left:0;z-index:70;width:max-content;max-width:min(340px,90vw);max-height:230px;overflow:hidden;background:#060709;border:2px solid var(--gold);border-radius:10px;padding:11px 13px;font-size:12px;line-height:1.55;color:#f2f0e8;box-shadow:0 12px 30px rgba(0,0,0,.9),0 0 0 1px #000;pointer-events:none}
 #tacPop.show{display:block}
 #tacPop .tp-h{margin-bottom:5px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 #tacPop .tp-name{font-weight:bold;font-size:13px}
 #tacPop .tp-d{color:#d9d5c8}
-#tacPop .tp-close{display:none}
-/* 모바일: 하단 시트로 (잘림 없음) */
-@media(hover:none){
-  #tacPop{left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom,0) + 10px);top:auto !important;max-width:none;width:auto;pointer-events:auto;border-width:3px;padding:14px 16px;font-size:14px}
-  #tacPop .tp-close{display:block;text-align:center;margin-top:10px;color:var(--gold);font-weight:bold;border-top:1px solid var(--line);padding-top:8px}
-}
+/* 편성 슬롯: 접이식 전법 정보 박스 */
+.tac-h-right{margin-left:auto;display:flex;gap:8px;align-items:center;white-space:nowrap}
+.tac-change{font-size:10.5px;padding:2px 9px;border:1px solid var(--line);border-radius:6px;color:var(--sub);background:transparent;cursor:pointer}
+.tac-change:hover{border-color:var(--gold);color:var(--gold)}
 /* ── 모바일(아이폰/안드로이드 세로) 대응 ── */
 @media(max-width:600px){
   .topbar .actions{width:100%}
@@ -433,8 +431,12 @@ function renderSlots(){
       const tn = deck.tactics[i][j];
       if(!tn) return `<div class="tslot" onclick="openTModal(${i},${j})">＋ 전법 ${j+1} 선택</div>`;
       const t = T[tn];
-      return `<div class="tslot filled" onclick="openTModal(${i},${j})">
-        <span class="chip t${t.type}">${t.type}</span>${rname(tn)} <span class="rate">${t.rate}</span></div>`;
+      // 고유 전법처럼 탭하면 설명이 인라인으로 펼쳐지는 접이식 박스 (+ 변경 버튼)
+      return `<div class="skillbox" onclick="this.classList.toggle('open')">
+        <div class="sk-h"><span class="chip t${t.type}">${t.type}</span><b>${rcolor(tn)}</b><span class="rate">${t.rate}</span>
+          <span class="tac-h-right"><span style="color:var(--sub);font-size:10px">▾ 정보</span>
+          <button class="tac-change" onclick="event.stopPropagation();openTModal(${i},${j})">변경</button></span></div>
+        <div class="sk-d">${esc(t.desc)}</div></div>`;
     }).join('');
     return `<div class="slot">${badge}
       <div><span class="chip f${g.faction}">${g.faction}</span><span class="gname" style="cursor:pointer" onclick="openGModal(${i})">${name}</span>${owned.size && !owned.has(name)?' <span class="miss-badge">미보유</span>':''}</div>
@@ -712,36 +714,23 @@ function tacPopHTML(name){
     + `<div class="tp-d">${esc(t.desc)}</div>`
     + `<div class="tp-close" onclick="hideTacPop()">닫기</div>`;
 }
-function showTacPop(name, anchor, mobile){
+function showTacPop(name, anchor){
   const pop = document.getElementById('tacPop');
   const html = tacPopHTML(name); if(!html){ hideTacPop(); return; }
   pop.innerHTML = html;
+  // 팝오버를 카드 안에 넣고 CSS(position:absolute; bottom:100%)로 카드 '위'에 배치
+  // → 분석 패널(.h-tip, 카드 아래)과 절대 안 겹침. zoom 좌표 문제도 회피.
+  const host = anchor.closest('.hcard');
+  if(!host){ hideTacPop(); return; }
+  host.appendChild(pop);
   pop.classList.add('show');
-  if(!mobile && anchor){ // 데스크톱: 요소 아래에 뷰포트 클램프 배치
-    const r = anchor.getBoundingClientRect();
-    pop.style.top = ''; pop.style.left = '-9999px'; // 폭 측정용
-    const pw = pop.offsetWidth, ph = pop.offsetHeight;
-    let left = r.left, top = r.bottom + 6;
-    left = Math.max(8, Math.min(left, innerWidth - pw - 8));
-    if(top + ph > innerHeight - 8) top = Math.max(8, r.top - ph - 6);
-    pop.style.left = left + 'px'; pop.style.top = top + 'px';
-  }
 }
 function hideTacPop(){ const p=document.getElementById('tacPop'); if(p) p.classList.remove('show'); }
-(function initTacPop(){
-  const touch = matchMedia('(hover:none)').matches;
-  if(!touch){
-    document.addEventListener('mouseover', e=>{ const el=e.target.closest('.taci'); if(el) showTacPop(el.dataset.t, el, false); });
-    document.addEventListener('mouseout', e=>{ if(e.target.closest('.taci')) hideTacPop(); });
-  } else {
-    // 모바일: 전법 이름 탭 → 정보 패널(카드/슬롯 클릭 전파 차단)
-    document.addEventListener('click', e=>{
-      const el=e.target.closest('.taci');
-      if(el){ e.stopPropagation(); e.preventDefault(); showTacPop(el.dataset.t, el, true); return; }
-      if(!e.target.closest('#tacPop')) hideTacPop();  // 바깥 탭 → 닫기
-    }, true);
-  }
-})();
+// 데스크톱(마우스) 전용: 홈 카드 전법 이름 호버 → 팝오버. 모바일은 편성 슬롯 인라인 펼침 사용.
+if(!matchMedia('(hover:none)').matches){
+  document.addEventListener('mouseover', e=>{ const el=e.target.closest('.taci'); if(el) showTacPop(el.dataset.t, el); });
+  document.addEventListener('mouseout', e=>{ if(e.target.closest('.taci')) hideTacPop(); });
+}
 
 // 미보유 무장 대체 후보 (보유 무장 중 역할 유사도 점수)
 function suggestSubs(missName){
@@ -848,7 +837,7 @@ function renderPresetNote(){
       if(!tn) return;
       const t = T[tn]; if(!t) return;
       const {similar, builds} = tacticSubs(tn, gname);
-      html += `<div style="margin:5px 0 2px"><b>${gname}</b>의 <b>${rname(tn)}</b> <span class="chip t${t.type}">${t.type}</span><span class="chip troop">${t.trait}</span>`;
+      html += `<div style="margin:5px 0 2px"><b>${gname}</b>의 <b>${rcolor(tn)}</b> <span class="chip t${t.type}">${t.type}</span><span class="chip troop">${t.trait}</span>`;
       if(similar.length) html += `<br>　유사 전법: ` + similar.map(s=>`<button style="font-size:11px;padding:1px 8px;margin:1px" title="${esc(s.desc)}" onclick="equipT(${i},${j},'${s.name}')">${rcolor(s.name)} <span style="color:var(--sub)">${s.rate}</span></button>`).join(' ');
       if(builds.length) html += `<br>　다른 티어덱의 ${gname} 빌드: ` + builds.slice(0,4).map(b=>`<button style="font-size:11px;padding:1px 8px;margin:1px" onclick="equipT(${i},${j},'${b.t}')">${rcolor(b.t)} <span style="color:var(--sub)">(${esc(b.deck)})</span></button>`).join(' ');
       html += `</div>`;
