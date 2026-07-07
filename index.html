@@ -110,6 +110,20 @@ body:not(.home) #homeView{display:none}
 .mine-badge{font-size:10px;color:#7fc97f;margin-left:4px}
 #authStatus button{font-size:11px;padding:2px 9px;border:1px solid var(--line);background:var(--panel);border-radius:6px;cursor:pointer;margin-left:6px}
 #authStatus button:hover{border-color:var(--gold)}
+/* 카드 하단 액션(좋아요/공유) */
+.card-acts{display:flex;gap:6px;align-items:center;margin-top:7px}
+.like-btn,.link-btn{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:2px 10px;cursor:pointer;font-size:11px;color:var(--txt)}
+.like-btn:hover,.link-btn:hover{border-color:var(--gold)}
+.like-btn.liked{border-color:#e0668a;color:#e0668a}
+.sortbtn{font-size:11px;padding:2px 9px;border:1px solid var(--line);background:var(--panel);border-radius:12px;cursor:pointer;margin-left:4px;color:var(--txt)}
+.sortbtn.on{background:var(--gold);color:#1a1a1a;border-color:var(--gold)}
+/* 진형 선택 가능 카드 */
+.fmt.pick{cursor:pointer}
+.fmt.pick:hover{border-color:var(--gold)}
+/* 슬롯 인라인 유사 전법 */
+.alt-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:2px 0 4px;padding-left:3px}
+.alt-lbl{font-size:10px;color:var(--sub);margin-right:2px}
+.fchip.mini{font-size:10px;padding:2px 7px;margin:0}
 .hcard .h-tier{font-size:11px;font-weight:bold;color:var(--gold)}
 .hcard .h-name{font-size:15px;font-weight:bold;margin:2px 0}
 .hcard .h-gen{font-size:12.5px;color:var(--txt)}
@@ -213,7 +227,6 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
       <select id="streamSel" class="editor-only"><option value="">📺 방송 상담덱 불러오기…</option></select>
       <button onclick="openOwnModal()">🎖 보유 무장 <span id="ownCnt"></span></button>
       <button onclick="openSearchModal()">🔍 조합 검색</button>
-      <button class="editor-only" id="regBtn" style="display:none" onclick="openRegModal()">📤 내 덱 등록</button>
       <button class="editor-only" onclick="openIO()">↕ 내보내기/가져오기</button>
       <button class="danger editor-only" onclick="resetDeck()">초기화</button>
     </div>
@@ -231,7 +244,8 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
     </div>
     <div class="panel" id="userDeckPanel" style="display:none">
       <h2>👥 유저 등록 덱<span id="homeUserCnt" style="font-size:12px;color:var(--sub);font-weight:normal"></span>
-        <span style="font-size:12px;color:var(--sub);font-weight:normal"> — 직접 편성한 덱을 등록해 공유할 수 있습니다 (편성 화면의 📤 버튼)</span>
+        <span id="userSortCtl" style="font-size:12px;font-weight:normal;margin-left:8px"></span>
+        <span style="font-size:12px;color:var(--sub);font-weight:normal"> — 직접 편성한 덱을 등록해 공유 (편성 화면의 💾 저장하기)</span>
         <span id="authStatus" style="float:right;font-size:12px;font-weight:normal"></span></h2>
       <div class="home-grid" id="homeUser"></div>
     </div>
@@ -245,7 +259,7 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
   <div class="grid">
     <div>
       <div class="panel">
-        <h2>진형</h2>
+        <h2 id="fmtHead">진형</h2>
         <div class="formations" id="fmtBox"></div>
       </div>
       <div class="panel">
@@ -260,6 +274,10 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
       </div>
     </div>
     <div>
+      <div class="panel" id="savePanel" style="display:none;text-align:center">
+        <button class="primary" id="regBtn" style="font-size:16px;font-weight:bold;padding:13px 28px;width:100%" onclick="openRegModal()">💾 저장하기</button>
+        <div class="note" style="margin-top:6px">편성한 덱을 등록해 모두와 공유합니다 (닉네임·비밀번호 필요)</div>
+      </div>
       <div class="panel">
         <h2>조합 보너스</h2>
         <div id="comboBox"></div>
@@ -356,20 +374,17 @@ textarea{width:100%;height:180px;background:var(--panel2);color:var(--txt);borde
 <!-- 유저 덱 등록 모달 -->
 <div class="modal-bg" id="regModal">
   <div class="modal" style="max-width:560px">
-    <div class="m-head"><b id="regTitle">📤 내 덱 등록</b><span class="note">— 현재 편성을 모두가 볼 수 있게 공유합니다</span>
+    <div class="m-head"><b id="regTitle">💾 덱 저장</b><span class="note">— 현재 편성을 모두가 볼 수 있게 공유합니다</span>
       <button style="margin-left:auto" onclick="closeModal('regModal')">✕ 닫기</button></div>
     <div class="m-body">
       <div id="regPreview" class="note" style="margin-bottom:8px"></div>
       <div style="display:flex;flex-direction:column;gap:8px">
-        <label class="note" style="display:flex;align-items:center;gap:8px">진형
-          <select id="regFormation" onchange="setRegFormation()" style="flex:1;min-width:0"></select></label>
         <input type="text" id="regNick" maxlength="12" placeholder="닉네임 (=아이디, 최대 12자)">
         <input type="password" id="regPw" maxlength="64" placeholder="비밀번호 (6자 이상 · 수정/삭제 시 필요)" autocomplete="new-password">
         <input type="text" id="regName" maxlength="20" placeholder="덱 이름 (최대 20자, 예: 마초 원맨캐리)">
         <textarea id="regDesc" maxlength="300" style="height:110px" placeholder="덱 설명 — 어떻게 굴러가는 덱인지, 필수 조건은 무엇인지 (최대 300자)"></textarea>
-        <div id="regAltsBox"></div>
         <div style="display:flex;gap:8px;align-items:center">
-          <button class="primary" id="regSubmit" onclick="submitReg()">등록하기</button>
+          <button class="primary" id="regSubmit" onclick="submitReg()">저장하기</button>
           <span class="note" id="regMsg"></span>
         </div>
         <p class="note">※ <b>닉네임+비밀번호</b>로 어느 브라우저에서든 로그인해 내 덱을 수정·삭제할 수 있습니다(👥 목록의 ✏·🗑 버튼). 닉네임은 아이디처럼 쓰여, 같은 닉네임은 같은 비밀번호를 알아야 다시 쓸 수 있습니다(사칭 방지). <b>비밀번호는 분실 시 복구가 불가</b>하니 잘 보관하세요. 도배 방지를 위해 5분에 1개만 등록됩니다.</p>
@@ -445,8 +460,23 @@ let pickSlot = 0, pickTactic = [0,0];
 
 // ── 진형 ──
 function fmtByName(n){ return DATA.formations.find(f=>f.name===n); }
-function renderFormations(){ // 현재 덱의 진형 정보만 표시(선택 불가)
+// 직접 편성(빈 덱)·내 유저 덱 편집 시엔 진형 선택 가능, 티어/방송 프리셋은 추천 진형 고정 표시
+function fmtEditable(){ return currentPreset === null || (currentPreset && currentPreset.src === 'user'); }
+function renderFormations(){
   const box = document.getElementById('fmtBox');
+  const head = document.getElementById('fmtHead');
+  if(fmtEditable()){
+    if(head) head.innerHTML = '진형 <span style="font-size:12px;color:var(--sub);font-weight:normal">— 클릭해 선택하세요</span>';
+    box.innerHTML = DATA.formations.map(f=>{
+      const lay = `전열 ${f.front} · 후열 ${f.back} <span style="color:var(--sub)">(피격 ${f.rates.join('/')}%)</span>`;
+      return `<div class="fmt pick ${deck.formation===f.name?'sel':''}" onclick="setFormation('${f.name}')">
+        <div class="nm">${f.name}</div><div class="lay">${lay}</div>
+        <div class="fx">${f.effects.map(e=>'· '+e).join('<br>')}</div></div>`;
+    }).join('');
+    return;
+  }
+  // 프리셋: 현재 진형만 읽기전용
+  if(head) head.textContent = '진형';
   const f = fmtByName(deck.formation);
   if(!f){ box.innerHTML = ''; return; }
   const lay = `전열 ${f.front} · 후열 ${f.back} <span style="color:var(--sub)">(피격 ${f.rates.join('/')}%)</span>`;
@@ -477,11 +507,19 @@ function renderSlots(){
       if(!tn) return `<div class="tslot" onclick="openTModal(${i},${j})">＋ 전법 ${j+1} 선택</div>`;
       const t = T[tn];
       // 고유 전법처럼 탭하면 설명이 인라인으로 펼쳐지는 접이식 박스 (+ 변경 버튼)
-      return `<div class="skillbox" onclick="this.classList.toggle('open')">
+      const boxHtml = `<div class="skillbox" onclick="this.classList.toggle('open')">
         <div class="sk-h"><span class="chip t${t.type}">${t.type}</span><b>${rcolor(tn)}</b><span class="rate">${t.rate}</span>
           <span class="tac-h-right"><span style="color:var(--sub);font-size:10px">▾ 정보</span>
           <button class="tac-change" onclick="event.stopPropagation();openTModal(${i},${j})">변경</button></span></div>
         <div class="sk-d">${esc(t.desc)}</div></div>`;
+      // 등록 시 함께 공유할 '유사 전법'을 여기서 바로 고름 (미보유자 대체용)
+      const {similar} = tacticSubs(tn);
+      const key = i+'-'+j, sel = regAlts[key] || [];
+      const altRow = similar.length
+        ? `<div class="alt-row"><span class="alt-lbl" title="이 전법이 없는 사람을 위한 대체 추천 — 눌러서 등록에 포함">🔁 유사</span>` +
+          similar.map(s=>`<span class="fchip mini ${sel.includes(s.name)?'on':''}" title="${esc(s.desc)}" onclick="toggleRegAlt('${key}','${esc(s.name)}')">${s.name}</span>`).join('') + `</div>`
+        : '';
+      return boxHtml + altRow;
     }).join('');
     return `<div class="slot">${badge}
       <div><span class="chip f${g.faction}">${g.faction}</span><span class="gname" style="cursor:pointer" onclick="openGModal(${i})">${name}</span>${owned.size && !owned.has(name)?' <span class="miss-badge">미보유</span>':''}</div>
@@ -499,7 +537,7 @@ function renderSlots(){
     </div>`;
   }).join('');
 }
-function removeG(i){ deck.slots[i]=null; deck.tactics[i]=['','']; renderAll(); }
+function removeG(i){ deck.slots[i]=null; deck.tactics[i]=['','']; delete regAlts[i+'-0']; delete regAlts[i+'-1']; renderAll(); }
 
 // ── 보너스 ──
 function renderCombos(){
@@ -630,19 +668,21 @@ function renderTList(){
     (!q || t.name.includes(q) || t.desc.includes(q)) &&
     (!tFilterState.type || t.type===tFilterState.type) &&
     (!tFilterState.trait || t.trait===tFilterState.trait));
+  const used = new Set(usedAll);   // 이미 편성에 들어간 전법은 중복 선택 불가(무장과 동일)
   document.getElementById('tList').innerHTML = list.map(t=>{
-    const cnt = usedAll.filter(x=>x===t.name).length;
-    return `<div class="pick-row" onclick="pickT('${t.name}')">
-      <div style="min-width:130px"><span class="chip t${t.type}">${t.type}</span><span class="chip troop">${t.trait}</span><br><b>${rcolor(t.name)}</b> ${cnt?`<span style="color:#e0a05c;font-size:11px">사용중×${cnt}</span>`:''}</div>
+    const isUsed = used.has(t.name);
+    return `<div class="pick-row ${isUsed?'used':''}" ${isUsed?'':`onclick="pickT('${t.name}')"`}>
+      <div style="min-width:130px"><span class="chip t${t.type}">${t.type}</span><span class="chip troop">${t.trait}</span><br><b>${rcolor(t.name)}</b> ${isUsed?`<span style="color:#e0a05c;font-size:11px">사용중</span>`:''}</div>
       <div class="info"><span class="rate">발동률 ${t.rate}</span><div class="desc">${esc(t.desc)}</div></div>
     </div>`;
   }).join('') || '<p class="note" style="padding:12px">조건에 맞는 전법이 없습니다.</p>';
 }
 function pickT(name){
   deck.tactics[pickTactic[0]][pickTactic[1]] = name;
+  delete regAlts[pickTactic[0]+'-'+pickTactic[1]];   // 전법 바뀌면 이전 유사전법 선택 해제
   closeModal('tModal'); renderAll();
 }
-function clearTactic(){ deck.tactics[pickTactic[0]][pickTactic[1]]=''; closeModal('tModal'); renderAll(); }
+function clearTactic(){ deck.tactics[pickTactic[0]][pickTactic[1]]=''; delete regAlts[pickTactic[0]+'-'+pickTactic[1]]; closeModal('tModal'); renderAll(); }
 
 // ── 프리셋 ──
 function renderPresets(){
@@ -710,6 +750,7 @@ function loadDeckDef(src, i){
   const p = src==='stream' ? DATA.streamDecks[i] : DATA.decks[i];
   if(!p) return;
   deck = newDeck();
+  regAlts = {};
   currentPreset = {src, idx: i};
   swapLog = {};
   // 시트 배치도(front/back) 기반: 전열 무장 → 앞 슬롯, 후열 → 뒷 슬롯
@@ -730,6 +771,8 @@ function moveSlot(i, d){
   if(j < 0 || j > 2) return;
   [deck.slots[i], deck.slots[j]] = [deck.slots[j], deck.slots[i]];
   [deck.tactics[i], deck.tactics[j]] = [deck.tactics[j], deck.tactics[i]];
+  // 유사전법 선택도 함께 스왑(위치 기준 키)
+  [0,1].forEach(t=>{ const a=i+'-'+t, b=j+'-'+t, tmp=regAlts[a]; if(regAlts[b]) regAlts[a]=regAlts[b]; else delete regAlts[a]; if(tmp) regAlts[b]=tmp; else delete regAlts[b]; });
   renderAll();
 }
 // 인연 패널에서 무장 추가
@@ -795,6 +838,7 @@ function tacticSubs(tName){
 }
 function equipT(slotIdx, tIdx, name){
   deck.tactics[slotIdx][tIdx] = name;
+  delete regAlts[slotIdx+'-'+tIdx];
   renderAll();
 }
 
@@ -934,10 +978,11 @@ async function fbLoadUserDecks(){
       const desc = nfc(f.desc?.stringValue||'').slice(0,400);
       const ts = parseInt(f.ts?.integerValue||0);
       const owner = f.owner?.stringValue || '';
+      const likes = parseInt(f.likes?.integerValue||0) || 0;
       const docId = (r.document.name||'').split('/').pop();
       const d0 = new Date(ts);
       return {
-        name, nick, desc, ts, payload, owner, docId,
+        name, nick, desc, ts, payload, owner, docId, likes,
         title: `👥 ${name} (등록: ${nick})`,
         principle: desc,
         source: {show: `유저 등록 덱 — ${nick}`, ts: `${d0.getFullYear()}-${d0.getMonth()+1}-${d0.getDate()}`},
@@ -948,19 +993,30 @@ async function fbLoadUserDecks(){
     renderUserDecks();
   }catch(e){ /* 네트워크 실패 시 조용히 무시 */ }
 }
+let userSort = 'new';   // 'new' | 'likes'
+function setUserSort(s){ userSort = s; renderUserDecks(); }
+const getLiked = () => new Set(JSON.parse(localStorage.getItem('tcgd_liked')||'[]'));
 function renderUserDecks(){
   const panel = document.getElementById('userDeckPanel');
   if(!fbOn()){ panel.style.display='none'; return; }
   panel.style.display='';
-  document.getElementById('regBtn').style.display='';
+  document.getElementById('savePanel').style.display='';
+  const sortCtl = document.getElementById('userSortCtl');
+  if(sortCtl) sortCtl.innerHTML = DATA.userDecks.length
+    ? `<button class="sortbtn ${userSort==='new'?'on':''}" onclick="setUserSort('new')">최신순</button><button class="sortbtn ${userSort==='likes'?'on':''}" onclick="setUserSort('likes')">👍 인기순</button>`
+    : '';
   const box = document.getElementById('homeUser');
   const dateStr = ts => { const d=new Date(ts); return `${d.getMonth()+1}/${d.getDate()}`; };
-  box.innerHTML = DATA.userDecks.map((u,i)=>{
+  const liked = getLiked();
+  const view = [...DATA.userDecks];
+  if(userSort==='likes') view.sort((a,b)=>(b.likes||0)-(a.likes||0) || b.ts-a.ts);
+  box.innerHTML = view.map(u=>{
+    const i = DATA.userDecks.indexOf(u);   // 정렬돼도 실제 인덱스로 핸들러 연결
     const tacLines = u.generals.map((g,k)=>{
       const ts2=(u.tactics[k]||[]).filter(Boolean);
       return ts2.length?`<div class="h-tac"><span class="h-tacg">${esc(g)}</span><span>${ts2.map(rname).join(' · ')}</span></div>`:'';
     }).filter(Boolean).join('');
-    const mine = isMine(u);
+    const mine = isMine(u), isLiked = liked.has(u.docId);
     return `<div class="hcard" data-mine="${mine?'1':'0'}" data-g="${u.generals.join(',')}" data-t="${(u.tactics||[]).flat().filter(Boolean).join(',')}" data-n="${esc(u.name)}" onclick="loadUserDeck(${i})">
       ${mine?`<span class="mine-actions"><button title="수정" onclick="event.stopPropagation();editUserDeck(${i})">✏</button><button title="삭제" onclick="event.stopPropagation();deleteUserDeck(${i})">🗑</button></span>`:''}
       <span class="h-tier">[👥 ${esc(u.nick)} · ${dateStr(u.ts)}]${mine?'<span class="mine-badge">내 덱</span>':''}</span>
@@ -968,11 +1024,43 @@ function renderUserDecks(){
       <div class="h-gen">${u.generals.map(g=>`<span class="chip f${G[g].faction}">${G[g].faction}</span>${g}`).join(' ')}</div>
       ${tacLines?`<div class="h-tacs">${tacLines}</div>`:''}
       ${u.desc?`<div class="h-cmt">${esc(u.desc.slice(0,90))}${u.desc.length>90?'…':''}</div>`:''}
+      <div class="card-acts">
+        <button class="like-btn ${isLiked?'liked':''}" title="추천" onclick="event.stopPropagation();likeDeck(${i})">👍 <span>${u.likes||0}</span></button>
+        <button class="link-btn" title="공유 링크 복사" onclick="event.stopPropagation();copyDeckLink('${u.docId}',this)">🔗 링크</button>
+      </div>
     </div>`;
   }).join('') || '<p class="note">아직 등록된 덱이 없습니다. 첫 덱을 등록해 보세요!</p>';
   filterDecks();
 }
-function loadUserDeck(i){
+// 좋아요(+1). 브라우저당 덱별 1회. Firestore 규칙이 likes 필드 +1만 허용.
+async function likeDeck(i){
+  const u = DATA.userDecks[i]; if(!u || !u.docId) return;
+  const liked = getLiked();
+  if(liked.has(u.docId)) return;                 // 이미 추천함
+  liked.add(u.docId);
+  localStorage.setItem('tcgd_liked', JSON.stringify([...liked]));
+  u.likes = (u.likes||0) + 1;                    // 낙관적 반영
+  renderUserDecks();
+  try{
+    const res = await fetch(`${fbBase()}/userDecks/${u.docId}?key=${FB.apiKey}&updateMask.fieldPaths=likes`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({fields:{ likes:{integerValue:String(u.likes)} }})
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+  }catch(e){   // 실패 시 롤백
+    u.likes = Math.max(0,(u.likes||1)-1);
+    liked.delete(u.docId); localStorage.setItem('tcgd_liked', JSON.stringify([...liked]));
+    renderUserDecks();
+  }
+}
+// 덱 공유 링크(#u=<docId>) 복사
+function copyDeckLink(docId, btn){
+  const url = location.origin + location.pathname + '#u=' + docId;
+  navigator.clipboard.writeText(url).then(()=>{
+    if(btn){ const o=btn.innerHTML; btn.innerHTML='✅ 복사됨'; setTimeout(()=>btn.innerHTML=o, 1400); }
+  }).catch(()=>{ prompt('아래 링크를 복사하세요:', url); });
+}
+function loadUserDeck(i, fromHash){
   const u = DATA.userDecks[i];
   if(!u) return;
   deck = newDeck();
@@ -982,62 +1070,52 @@ function loadUserDeck(i){
     const p=(u.payload.tactics&&u.payload.tactics[k])||['',''];
     return [T[p[0]]?p[0]:'', T[p[1]]?p[1]:''];
   });
+  regAlts = JSON.parse(JSON.stringify(u.payload && u.payload.alts || {}));   // 유사 전법 선택 복원
   currentPreset = {src:'user', idx:i};
   swapLog = {};
   renderAll(); showEditor();
+  if(u.docId && !fromHash) history.replaceState({v:'user',id:u.docId}, '', '#u=' + u.docId);   // 퍼머링크
 }
-// 등록자가 직접 고르는 유사 전법(대체 전법). key='슬롯-전법칸' → 전법명 배열
+function loadUserDeckById(docId, fromHash){
+  const i = DATA.userDecks.findIndex(u=>u.docId===docId);
+  if(i>=0) loadUserDeck(i, fromHash);
+  return i>=0;
+}
+// 등록 시 함께 공유할 '유사 전법'(대체 전법). key='슬롯-전법칸' → 전법명 배열. 슬롯에서 인라인으로 고름.
 let regAlts = {};
 function toggleRegAlt(key, name){
   const arr = regAlts[key] || (regAlts[key] = []);
   const k = arr.indexOf(name);
   if(k>=0) arr.splice(k,1); else arr.push(name);
-  renderRegAlts();
+  renderSlots();   // 슬롯 인라인 칩 상태 갱신
 }
-function renderRegAlts(){
-  const box = document.getElementById('regAltsBox');
-  if(!box) return;
-  let rows = '';
+// 저장 시 실제로 내보낼 alts: 현재 편성된 전법의 '유사' 목록에 실재하는 것만(스테일 제거)
+function collectAlts(){
+  const out = {};
   deck.slots.forEach((gname,i)=>{
     if(!gname) return;
     (deck.tactics[i]||[]).forEach((tn,j)=>{
       if(!tn) return;
-      const {similar} = tacticSubs(tn);
-      if(!similar.length) return;
-      const key = i+'-'+j;
-      const sel = regAlts[key] || [];
-      rows += `<div style="margin:5px 0"><b>${esc(gname)}</b>의 <b>${rcolor(tn)}</b> 대신 쓸 수 있는 유사 전법:<br>` +
-        similar.map(s=>`<span class="fchip ${sel.includes(s.name)?'on':''}" style="font-size:11px;margin:3px 3px 0 0" title="${esc(s.desc)}" onclick="toggleRegAlt('${key}','${esc(s.name)}')">${s.name} <span style="color:var(--sub)">${s.rate}</span></span>`).join('') +
-        `</div>`;
+      const key = i+'-'+j, sel = regAlts[key];
+      if(!sel || !sel.length) return;
+      const validNames = new Set(tacticSubs(tn).similar.map(s=>s.name));
+      const keep = sel.filter(n=>validNames.has(n));
+      if(keep.length) out[key] = keep;
     });
   });
-  const selCount = Object.values(regAlts).reduce((n,a)=>n+(a?a.length:0), 0);
-  // 접이식(기본 접힘)으로 등록 화면이 과하게 길어지지 않게 함
-  box.innerHTML = rows
-    ? `<details${selCount?' open':''} style="border:1px solid var(--line);border-radius:7px;padding:6px 9px">
-        <summary style="cursor:pointer;font-size:12.5px"><b style="color:#5c9de0">🔁 유사 전법 등록 (선택)</b>${selCount?` <span style="color:var(--gold)">· ${selCount}개 선택됨</span>`:' — 펼쳐서 추천 전법 고르기'}</summary>
-        <div class="note" style="margin:6px 0 2px">보는 사람이 해당 전법이 없을 때 대체할 수 있도록, 추천하는 유사 전법을 골라 함께 공유합니다.</div>${rows}
-      </details>`
-    : '';
+  return out;
 }
 function updateRegPreview(){
   document.getElementById('regPreview').innerHTML =
     '등록될 편성: <b>' + deck.slots.join('·') + '</b> / <b>' + deck.formation + '</b><br>전법: ' +
     deck.slots.map((g,i)=>`${g}(${deck.tactics[i].filter(Boolean).join('·')||'-'})`).join(' / ');
 }
-function setRegFormation(){ // 등록 화면에서 진형 변경
-  deck.formation = document.getElementById('regFormation').value;
-  renderFormations();      // 편집 화면의 진형 표시도 동기화
-  updateRegPreview();
-}
 let regEditId = null;   // 수정 중인 문서 id (null이면 신규 등록)
 let regEditTs = 0;      // 수정 시 원래 등록 시각 유지
+let regEditLikes = 0;   // 수정 시 좋아요 수 보존
 function _showRegModal(){
-  document.getElementById('regFormation').innerHTML = DATA.formations.map(f=>
-    `<option value="${f.name}" ${f.name===deck.formation?'selected':''}>${f.name} (전열 ${f.front}·후열 ${f.back})</option>`).join('');
   updateRegPreview();
   document.getElementById('regMsg').textContent = '';
-  renderRegAlts();
   const editing = !!regEditId;
   // 수정 시엔 이미 로그인된 상태 → 닉네임 고정·비밀번호 입력 숨김
   const nickEl = document.getElementById('regNick'), pwEl = document.getElementById('regPw');
@@ -1048,14 +1126,14 @@ function _showRegModal(){
     if(AUTH.nick){ nickEl.value = AUTH.nick; pwEl.placeholder = '비밀번호 (로그인됨 — 비워도 됨)'; pwEl.required = false; }
     else { pwEl.placeholder = '비밀번호 (6자 이상 · 수정/삭제 시 필요)'; }
   }
-  document.getElementById('regTitle').textContent = editing ? '✏ 내 덱 수정' : '📤 내 덱 등록';
-  document.getElementById('regSubmit').textContent = editing ? '수정 저장' : '등록하기';
+  document.getElementById('regTitle').textContent = editing ? '✏ 덱 수정' : '💾 덱 저장';
+  document.getElementById('regSubmit').textContent = editing ? '수정 저장' : '저장하기';
   document.getElementById('regModal').classList.add('show');
 }
-function openRegModal(){   // 신규 등록
+function openRegModal(){   // 신규 저장
   if(!fbOn()) return;
-  if(deck.slots.filter(Boolean).length < 3){ alert('무장 3명을 모두 배치한 뒤 등록해 주세요.'); return; }
-  regEditId = null; regEditTs = 0; regAlts = {};
+  if(deck.slots.filter(Boolean).length < 3){ alert('무장 3명을 모두 배치한 뒤 저장해 주세요.'); return; }
+  regEditId = null; regEditTs = 0; regEditLikes = 0;
   document.getElementById('regNick').value = AUTH.nick || '';
   document.getElementById('regPw').value = '';
   document.getElementById('regName').value = '';
@@ -1065,9 +1143,8 @@ function openRegModal(){   // 신규 등록
 function editUserDeck(i){  // 내 덱 수정
   const u = DATA.userDecks[i];
   if(!u || !isMine(u)){ alert('이 덱을 수정하려면 등록에 쓴 닉네임·비밀번호로 로그인하세요.'); return; }
-  loadUserDeck(i);                       // 편집기에 로드(진형·슬롯·전법 반영)
-  regEditId = u.docId; regEditTs = u.ts || Date.now();
-  regAlts = JSON.parse(JSON.stringify(u.payload && u.payload.alts || {}));
+  loadUserDeck(i);                       // 편집기에 로드(진형·슬롯·전법·유사전법 반영)
+  regEditId = u.docId; regEditTs = u.ts || Date.now(); regEditLikes = u.likes || 0;
   _showRegModal();
   document.getElementById('regNick').value = u.nick;
   document.getElementById('regName').value = u.name;
@@ -1196,13 +1273,13 @@ async function submitReg(){
     await fbRefresh();   // 수정: idToken 신선화
   }
   msg.textContent = editing ? '저장 중…' : '등록 중…';
-  const alts = {};
-  Object.keys(regAlts).forEach(k=>{ if(regAlts[k] && regAlts[k].length) alts[k] = regAlts[k]; });
+  const alts = collectAlts();   // 슬롯에서 고른 유사 전법(스테일 제거)
   const payload = JSON.stringify({formation: deck.formation, slots: deck.slots, tactics: deck.tactics, alts});
   const fields = {
     nick:{stringValue:nick.slice(0,12)}, name:{stringValue:name.slice(0,20)},
     desc:{stringValue:desc.slice(0,300)}, payload:{stringValue:payload},
-    ts:{integerValue:String(editing ? regEditTs : Date.now())}
+    ts:{integerValue:String(editing ? regEditTs : Date.now())},
+    likes:{integerValue:String(editing ? regEditLikes : 0)}   // 좋아요 수(수정 시 보존)
   };
   if(AUTH.uid) fields.owner = {stringValue: AUTH.uid};
   try{
@@ -1290,11 +1367,20 @@ function showEditor(){
 function goHome(){ // 🏠 버튼·타이틀 클릭: 검색 조건을 초기화하고 히스토리를 정리하며 홈으로
   const ds = document.getElementById('deckSearch');
   if(ds && ds.value){ ds.value=''; filterDecks(); }   // 검색 필터 초기화
-  if(location.hash === '#deck') history.back();
+  if(location.hash === '#deck' || /^#u=/.test(location.hash)) history.back();
   else showHome();
 }
-window.addEventListener('popstate', ()=>{ showHome(); });
-if(location.hash === '#deck') history.replaceState(null, '', location.pathname); // 새로고침 잔여 해시 정리
+window.addEventListener('popstate', ()=>{
+  const m = location.hash.match(/^#u=(.+)$/);
+  if(m && loadUserDeckById(decodeURIComponent(m[1]), true)) return;   // 공유 링크 덱으로 이동
+  showHome();
+});
+// 초기 진입 시 #u=<docId> 공유 링크면 해당 덱을 연다(유저 덱 로드 후 호출)
+function applyInitialHash(){
+  const m = location.hash.match(/^#u=(.+)$/);
+  if(m){ if(!loadUserDeckById(decodeURIComponent(m[1]), true)){ history.replaceState(null, '', location.pathname); showHome(); } }
+  else if(location.hash === '#deck') history.replaceState(null, '', location.pathname); // 새로고침 잔여 해시 정리
+}
 function renderHome(){
   const trimEg = s => String(s).split(' — 예:')[0].split('(예:')[0].replace(/\s+$/,'');
   const card = (d, onclick, badge)=>{
@@ -1324,7 +1410,7 @@ function renderHome(){
   document.getElementById('homeStream').innerHTML =
     (DATA.streamDecks||[]).map((d,i)=>card(d, `loadStream(${i})`, `[${d.grade||'방송'}${d.by?'·'+esc(d.by):''}]`)).join('');
 }
-function resetDeck(){ deck = newDeck(); currentPreset = null; renderAll(); }
+function resetDeck(){ deck = newDeck(); regAlts = {}; currentPreset = null; renderAll(); }
 function openIO(){
   document.getElementById('ioText').value = JSON.stringify(deck);
   document.getElementById('ioModal').classList.add('show');
@@ -1333,7 +1419,7 @@ function importDeck(){
   try{
     const d = JSON.parse(document.getElementById('ioText').value);
     if(!d.slots || !d.tactics) throw 0;
-    deck = d; closeModal('ioModal'); renderAll();
+    deck = d; regAlts = {}; currentPreset = null; closeModal('ioModal'); renderAll();
   }catch(e){ alert('올바른 덱 코드가 아닙니다.'); }
 }
 
@@ -1452,7 +1538,7 @@ function renderAll(){
   renderFormations(); renderSlots(); renderCombos(); renderBonds(); renderStats(); renderWarn(); renderPresetNote();
 }
 renderPresets(); renderHome(); showRef('counter'); updateOwnCnt(); renderAll(); showHome();
-fbRestoreSession().then(()=>{ renderAuthStatus(); fbLoadUserDecks(); });
+fbRestoreSession().then(()=>{ renderAuthStatus(); return fbLoadUserDecks(); }).then(()=>{ applyInitialHash(); });
 </script>
 </body>
 </html>
